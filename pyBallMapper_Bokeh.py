@@ -63,6 +63,8 @@ def color_nodes(G, my_variable, my_palette, MIN_VALUE = 10000, MAX_VALUE = -1000
         
     print(my_variable, MIN_VALUE, MAX_VALUE)
     
+    return G, MIN_VALUE, MAX_VALUE
+    
     
     
     
