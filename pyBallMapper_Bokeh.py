@@ -2,20 +2,18 @@ import numpy as np
 import pandas as pd
 import networkx as nx
 
+from matplotlib.colors import to_hex
 
 from bokeh.plotting import figure, show
 
 from bokeh.models import (BoxZoomTool, Circle, HoverTool,
-                          MultiLine, Plot, Range1d, ResetTool,
-                          ColumnDataSource, LabelSet,
+                          Plot, ResetTool,
+                          ColumnDataSource,
                           TapTool, WheelZoomTool, PanTool,
-                          ColorBar, LinearColorMapper, BasicTicker,
-                          Button, TextInput,
-                          CustomJS, MultiChoice,
-                          SaveTool,
-                          Select)
+                          SaveTool, Range1d, MultiLine
+                          )
 
-from bokeh.palettes import linear_palette, Reds256, Turbo256
+#from bokeh.palettes import linear_palette, Reds256, Turbo256
 from bokeh.plotting import from_networkx, figure, curdoc
 
 
@@ -37,7 +35,7 @@ def create_bokeh_graph(G,
         # rescale the size for display
         G.nodes[node]['size rescaled'] = MAX_SCALE*G.nodes[node]['size']/MAX_NODE_SIZE + MIN_SCALE
 
-        G.nodes[node]['color'] = my_palette[0]
+        G.nodes[node]['color'] = to_hex(my_palette(0))
 
         for name, avg in values_df.loc[G.nodes[node]['points covered']].mean().iteritems():
             G.nodes[node][name] = avg
@@ -56,12 +54,12 @@ def color_nodes(G, my_variable, my_palette, MIN_VALUE = 10000, MAX_VALUE = -1000
     for node in G.nodes:
         if not pd.isna(G.nodes[node][my_variable]):
             color_id = (G.nodes[node][my_variable] - MIN_VALUE) / (MAX_VALUE - MIN_VALUE)
-            G.nodes[node]['color'] = my_palette[round(color_id*100)]
+            G.nodes[node]['color'] = to_hex(my_palette(color_id))
         else:
             G.nodes[node]['color'] = 'black'
         
         
-    print(my_variable, MIN_VALUE, MAX_VALUE)
+    print('color by variable {} \nMIN_VALUE: {:.3f}, MAX_VALUE: {:.3f}'.format(my_variable, MIN_VALUE, MAX_VALUE))
     
     return G, MIN_VALUE, MAX_VALUE
     
@@ -77,7 +75,6 @@ class graph_GUI():
         
         self.plot = Plot(plot_width=700, plot_height=600,
                     x_range=Range1d(-1, 1), y_range=Range1d(-1, 1),
-                    output_backend="svg",
                     sizing_mode="stretch_both")
 
         node_hover_tool = HoverTool(tooltips=[("index", "@index"), ("size", "@size")]
@@ -85,7 +82,7 @@ class graph_GUI():
                                                 for name in coloring_df.columns] )
         zoom_tool = WheelZoomTool()
         self.plot.add_tools(PanTool(), node_hover_tool, zoom_tool,
-                        ResetTool(), SaveTool())
+                            ResetTool(), SaveTool())
         self.plot.toolbar.active_scroll = zoom_tool
 
         self.graph_renderer = from_networkx(self.bokeh_graph, nx.spring_layout,
@@ -111,7 +108,7 @@ class graph_GUI():
 
         if variable == 'None':
             for node in self.bokeh_graph.nodes:
-                self.bokeh_graph.nodes[node]['color'] = self.my_palette[0]
+                self.bokeh_graph.nodes[node]['color'] = to_hex(self.my_palette(0))
         else:
             color_nodes(self.bokeh_graph, variable, self.my_palette)
 
