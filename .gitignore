@@ -1,3 +1,6 @@
 
 .DS_Store
 .ipynb_checkpoints/pyBallMapper-checkpoint.ipynb
+.ipynb_checkpoints/example_basic_circle-checkpoint.ipynb
+__pycache__/pyBallMapper.cpython-38.pyc
+__pycache__/pyBallMapper_Bokeh.cpython-38.pyc

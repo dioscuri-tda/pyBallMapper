@@ -2,21 +2,36 @@ import numpy as np
 import pandas as pd
 import networkx as nx
 
+import warnings
+
 from tqdm.notebook import tqdm
 
 class BallMapper():
-    def __init__(self, points, coloring_df, epsilon, dbg=False):
+    def __init__(self, points, coloring_df, epsilon, order=None, dbg=False):
         
         # find vertices
         self.vertices = {} # dict of points {idx_v: idx_p, ... }
         centers_counter = 1
         
+        # check wheter order is a list of lenght = len(points)
+        # otherwise use the defaut ordering
+        
+        if order:
+            if len(np.unique(order)) != len(points):
+                warnings.warn("Warning........... order is not compatible with points, using default ordering")
+                order = range(len(points))
+        else:
+            order = range(len(points))
+        
         if dbg:
             print('Finding vertices...')
         
-        pbar = tqdm(enumerate(points), disable=not(dbg))
+        pbar = tqdm(order, disable=not(dbg))
         
-        for idx_p, p in pbar:
+        for idx_p in pbar:
+            
+            # current point
+            p = points[idx_p]
             
             pbar.set_description("{} vertices found".format(centers_counter))
             
@@ -38,8 +53,8 @@ class BallMapper():
         self.points_covered_by_landmarks = dict()
         for idx_v in tqdm(self.vertices, disable=not(dbg)):
             self.points_covered_by_landmarks[idx_v] = []
-            for idx_p, p in enumerate(points):
-                distance = np.linalg.norm(p - points[self.vertices[idx_v]])
+            for idx_p in order:
+                distance = np.linalg.norm(points[idx_p] - points[self.vertices[idx_v]])
                 if distance <= epsilon:
                     self.points_covered_by_landmarks[idx_v].append(idx_p)
                 
