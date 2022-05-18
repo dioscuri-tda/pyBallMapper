@@ -6,8 +6,17 @@ import warnings
 
 from tqdm.notebook import tqdm
 
+
 class BallMapper():
-    def __init__(self, points, coloring_df, epsilon, order=None, dbg=False):
+    def __init__(self, points, coloring_df, epsilon, distance=False, order=None, dbg=False):
+        
+        self.epsilon = epsilon
+
+        if not distance:
+            distance = lambda x, y : np.linalg.norm(x - y)
+            if dbg: print('using euclidean distance')
+        else:
+            if dbg: print('using custom distance {}'.format(distance))
         
         # find vertices
         self.vertices = {} # dict of points {idx_v: idx_p, ... }
@@ -38,8 +47,8 @@ class BallMapper():
             is_covered = False
 
             for idx_v in self.vertices:
-                distance = np.linalg.norm(p - points[self.vertices[idx_v]])
-                if distance <= epsilon:
+                # distance = np.linalg.norm(p - points[self.vertices[idx_v]])
+                if distance(p, points[self.vertices[idx_v]]) <= epsilon:
                     is_covered = True
                     break
 
@@ -54,8 +63,8 @@ class BallMapper():
         for idx_v in tqdm(self.vertices, disable=not(dbg)):
             self.points_covered_by_landmarks[idx_v] = []
             for idx_p in order:
-                distance = np.linalg.norm(points[idx_p] - points[self.vertices[idx_v]])
-                if distance <= epsilon:
+                # distance = np.linalg.norm(points[idx_p] - points[self.vertices[idx_v]])
+                if distance(points[idx_p], points[self.vertices[idx_v]]) <= epsilon:
                     self.points_covered_by_landmarks[idx_v].append(idx_p)
                 
         # find edges
