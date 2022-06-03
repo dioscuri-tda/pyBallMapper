@@ -14,7 +14,7 @@ from bokeh.models import (BoxZoomTool, Circle, HoverTool,
                           )
 
 #from bokeh.palettes import linear_palette, Reds256, Turbo256
-from bokeh.plotting import from_networkx, figure, curdoc
+from bokeh.plotting import from_networkx, figure
 
 
 
