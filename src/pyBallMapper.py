@@ -2,6 +2,9 @@ import numpy as np
 import pandas as pd
 import networkx as nx
 
+import matplotlib.pyplot as plt
+from matplotlib import cm
+
 import warnings
 
 from tqdm.notebook import tqdm
@@ -136,7 +139,11 @@ class BallMapper():
             
     def color_by_variable(self, my_variable, my_palette, MIN_VALUE = np.inf, MAX_VALUE = -np.inf):
 
-        if my_variable not in self.Graph.nodes[1].keys(): # TODO find a better way to check
+        if my_variable is None:
+            for node in self.Graph.nodes:
+                self.Graph.nodes[node]['color'] = cm.get_cmap('tab10')(0)
+
+        elif my_variable not in self.Graph.nodes[1].keys(): # TODO find a better way to check
             warnings.warn("Warning........... {} is not a valid coloring, add it using the 'add_coloring' method".format(my_variable))
 
         else:
@@ -152,6 +159,41 @@ class BallMapper():
                     self.Graph.nodes[node]['color'] = my_palette(color_id)
                 else:
                     self.Graph.nodes[node]['color'] = 'black'
+
+
+    def draw_networx(self, coloring_variable=None, color_palette=cm.get_cmap(name='Reds'), 
+                     colorbar = False,
+                     this_ax = None, 
+                     MIN_SCALE = 100, # default in nx.draw_networkx is 300
+                     MAX_SCALE = 600,
+                     **kwargs):
+    
+        MAX_NODE_SIZE = max([self.Graph.nodes[node]['size'] for node in self.Graph.nodes])
+
+        if this_ax == None:
+            this_ax = plt.gca()
+
+        self.color_by_variable(coloring_variable, color_palette)
+
+        nx.draw_networkx(self.Graph, 
+                         pos = nx.spring_layout(self.Graph, seed=24),
+                         node_color = [self.Graph.nodes[node]['color'] for node in self.Graph.nodes],
+                         node_size =  [MAX_SCALE*self.Graph.nodes[node]['size']/MAX_NODE_SIZE + MIN_SCALE for node in self.Graph.nodes],
+                         alpha = 0.8,
+                         ax = this_ax,
+                         **kwargs)
+
+        # plot a legend
+        if colorbar:
+            sm = plt.cm.ScalarMappable(cmap = color_palette,
+                                       norm = plt.Normalize(vmin=min([self.Graph.nodes[node][coloring_variable] for node in self.Graph.nodes]), 
+                                                            vmax=max([self.Graph.nodes[node][coloring_variable] for node in self.Graph.nodes])))
+            plt.colorbar(sm, ax=this_ax)
+
+        return this_ax
+
+
+
 
 
 
