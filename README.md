@@ -1,10 +1,5 @@
 # pyBallMapper
 
-Python version of the Ball Mapper algorithm
-https://rdrr.io/cran/BallMapper/
+[version](https://img.shields.io/badge/version-0.1-blue)
 
-the notebooks contains examples and tools for visualize the graphs using either matplotlib or Bokeh.  
-
-In addition to libraries found in a default conda enviroment it requires Bokeh >= 2.2.2.  
-
-conda install -c conda-forge bokeh 
+Python version of the Ball Mapper algorithm described in [arXiv:1901.07410 ](https://arxiv.org/abs/1901.07410)
