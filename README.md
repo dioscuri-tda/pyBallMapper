@@ -4,6 +4,11 @@
 
 Python version of the Ball Mapper algorithm described in [arXiv:1901.07410 ](https://arxiv.org/abs/1901.07410) .  
 
+### Installation  
+```
+pip install pyballmapper
+```
+
 ### Basic usage
 ```
 from pyballmapper import BallMapper
