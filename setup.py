@@ -1,5 +1,8 @@
 from distutils.core import setup
 
+with open('README.md') as f:
+    long_description = f.read()
+
 setup(
     name='pyBallMapper',
     version='0.1.0',
@@ -9,7 +12,8 @@ setup(
     url='https://github.com/dgurnari/pyBallMapper',
     license='LICENSE.txt',
     description='Python implementation of the Ball Mapper algorithm.',
-    long_description=open('README.md').read(),
+    long_description=long_description,
+    long_description_content_type='text/markdown',
     install_requires=[
         'numpy',
         'pandas',
