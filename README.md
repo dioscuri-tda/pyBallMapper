@@ -1,5 +1,5 @@
 # pyBallMapper
 
-[version](https://img.shields.io/badge/version-0.1-blue)
+[version](https://img.shields.io/badge/version-0.1-blue.svg)
 
 Python version of the Ball Mapper algorithm described in [arXiv:1901.07410 ](https://arxiv.org/abs/1901.07410)
