@@ -5,7 +5,7 @@ with open('README.md') as f:
 
 setup(
     name='pyBallMapper',
-    version='0.1.0',
+    version='0.1.0.post1',
     author='Davide Gurnari',
     author_email='davide.gurnari@gmail.com',
     packages=['pyballmapper', 'pyballmapper.tests'],
