@@ -9,16 +9,69 @@ import warnings
 
 from tqdm.notebook import tqdm
 
+def bm_from_distances(X, epsilon):
+    centers_counter = 0
+    landmarks = {}
+    order = np.arange(X.shape[0])
+    for idx_p in order:
+        
+        is_covered = False
+
+        for idx_v in landmarks:
+            if X[idx_p, landmarks[idx_v]] <= epsilon:
+                is_covered = True
+                break
+
+        if not is_covered:
+            landmarks[centers_counter] = idx_p
+            centers_counter += 1
+
+    points_covered_by_landmarks = dict()
+    for idx_v in landmarks:
+        points_covered_by_landmarks[idx_v] = []
+        for idx_p in order:
+            if X[idx_p, landmarks[idx_v]] <= epsilon:
+                points_covered_by_landmarks[idx_v].append(idx_p)
+
+    edges = [] # list of edges [[idx_v, idx_u], ...]
+    for i, idx_v in enumerate(list(landmarks.keys())[:-1]):
+        for idx_u in list(landmarks.keys())[i+1:]:
+            intersection = set(points_covered_by_landmarks[idx_v]).intersection(points_covered_by_landmarks[idx_u])
+            if len(intersection) != 0:
+                edges.append([idx_v, idx_u])
+
+    Graph = nx.Graph()
+    Graph.add_nodes_from(landmarks.keys())
+    Graph.add_edges_from(edges)
+    
+    
+    for node in Graph.nodes:
+        Graph.nodes[node]['landmark'] = landmarks[node]
+        Graph.nodes[node]['points covered'] = points_covered_by_landmarks[node]
+        Graph.nodes[node]['size'] = len(Graph.nodes[node]['points covered'])
+        Graph.nodes[node]['color'] = 'r'
+    
+    return Graph
+
 
 class BallMapper():
-    def __init__(self, points, epsilon, orbits=None, distance=None, order=None, dbg=False):
+    def __init__(self, X, epsilon, orbits=None, distance=None, order=None, distance_matrix = False, dbg=False):
         
         self.epsilon = epsilon
+        if not distance_matrix:
+            n_points = len(X)
+        else:
+            n_points = X.shape[0]
 
         # set the distance function
-        if not distance:
+        
+        f = lambda i : X[i]
+        if not distance and not distance_matrix:
             distance = lambda x, y : np.linalg.norm(x - y)
             if dbg: print('using euclidean distance')
+        elif not distance and distance_matrix:
+            distance = lambda x, y : X[x,y]
+            f = lambda i : i
         else:
             if dbg: print('using custom distance {}'.format(distance))
 
@@ -26,7 +79,7 @@ class BallMapper():
         if orbits is None:
             points_have_orbits = False
         elif type(orbits) is np.ndarray  or (type(orbits) is list):
-            if len(orbits) != len(points):
+            if len(orbits) != n_points:
                 points_have_orbits = False
                 warnings.warn("Warning........... orbits is not compatible with points, ignoring it")
             else:
@@ -43,11 +96,11 @@ class BallMapper():
         # otherwise use the defaut ordering
         
         if order:
-            if len(np.unique(order)) != len(points):
+            if len(np.unique(order)) != n_points:
                 warnings.warn("Warning........... order is not compatible with points, using default ordering")
-                order = range(len(points))
+                order = range(n_points)
         else:
-            order = range(len(points))
+            order = range(n_points)
         
         if dbg:
             print('Finding vertices...')
@@ -57,14 +110,14 @@ class BallMapper():
         for idx_p in pbar:
             
             # current point
-            p = points[idx_p]
+            p = f(idx_p)
             
             pbar.set_description("{} vertices found".format(centers_counter))
             
             is_covered = False
 
             for idx_v in landmarks:
-                if distance(p, points[landmarks[idx_v]]) <= epsilon:
+                if distance(p, f(landmarks[idx_v])) <= epsilon:
                     is_covered = True
                     break
 
@@ -85,7 +138,7 @@ class BallMapper():
         for idx_v in tqdm(landmarks, disable=not(dbg)):
             self.points_covered_by_landmarks[idx_v] = []
             for idx_p in order:
-                if distance(points[idx_p], points[landmarks[idx_v]]) <= epsilon:
+                if distance(f(idx_p), f(landmarks[idx_v])) <= epsilon:
                     self.points_covered_by_landmarks[idx_v].append(idx_p)
                 
         # find edges
