@@ -9,51 +9,6 @@ import warnings
 
 from tqdm.notebook import tqdm
 
-def bm_from_distances(X, epsilon):
-    centers_counter = 0
-    landmarks = {}
-    order = np.arange(X.shape[0])
-    for idx_p in order:
-        
-        is_covered = False
-
-        for idx_v in landmarks:
-            if X[idx_p, landmarks[idx_v]] <= epsilon:
-                is_covered = True
-                break
-
-        if not is_covered:
-            landmarks[centers_counter] = idx_p
-            centers_counter += 1
-
-    points_covered_by_landmarks = dict()
-    for idx_v in landmarks:
-        points_covered_by_landmarks[idx_v] = []
-        for idx_p in order:
-            if X[idx_p, landmarks[idx_v]] <= epsilon:
-                points_covered_by_landmarks[idx_v].append(idx_p)
-
-    edges = [] # list of edges [[idx_v, idx_u], ...]
-    for i, idx_v in enumerate(list(landmarks.keys())[:-1]):
-        for idx_u in list(landmarks.keys())[i+1:]:
-            intersection = set(points_covered_by_landmarks[idx_v]).intersection(points_covered_by_landmarks[idx_u])
-            if len(intersection) != 0:
-                edges.append([idx_v, idx_u])
-
-    Graph = nx.Graph()
-    Graph.add_nodes_from(landmarks.keys())
-    Graph.add_edges_from(edges)
-    
-    
-    for node in Graph.nodes:
-        Graph.nodes[node]['landmark'] = landmarks[node]
-        Graph.nodes[node]['points covered'] = points_covered_by_landmarks[node]
-        Graph.nodes[node]['size'] = len(Graph.nodes[node]['points covered'])
-        Graph.nodes[node]['color'] = 'r'
-    
-    return Graph
-
-
 class BallMapper():
     def __init__(self, X, epsilon, orbits=None, distance=None, order=None, distance_matrix = False, dbg=False):
         
