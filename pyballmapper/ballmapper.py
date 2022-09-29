@@ -9,16 +9,24 @@ import warnings
 
 from tqdm.notebook import tqdm
 
-
 class BallMapper():
-    def __init__(self, points, epsilon, orbits=None, distance=None, order=None, dbg=False):
+    def __init__(self, X, epsilon, orbits=None, distance=None, order=None, distance_matrix = False, dbg=False):
         
         self.epsilon = epsilon
+        if not distance_matrix:
+            n_points = len(X)
+        else:
+            n_points = X.shape[0]
 
         # set the distance function
-        if not distance:
+        
+        f = lambda i : X[i]
+        if not distance and not distance_matrix:
             distance = lambda x, y : np.linalg.norm(x - y)
             if dbg: print('using euclidean distance')
+        elif not distance and distance_matrix:
+            distance = lambda x, y : X[x,y]
+            f = lambda i : i
         else:
             if dbg: print('using custom distance {}'.format(distance))
 
@@ -26,7 +34,7 @@ class BallMapper():
         if orbits is None:
             points_have_orbits = False
         elif type(orbits) is np.ndarray  or (type(orbits) is list):
-            if len(orbits) != len(points):
+            if len(orbits) != n_points:
                 points_have_orbits = False
                 warnings.warn("Warning........... orbits is not compatible with points, ignoring it")
             else:
@@ -43,11 +51,11 @@ class BallMapper():
         # otherwise use the defaut ordering
         
         if order:
-            if len(np.unique(order)) != len(points):
+            if len(np.unique(order)) != n_points:
                 warnings.warn("Warning........... order is not compatible with points, using default ordering")
-                order = range(len(points))
+                order = range(n_points)
         else:
-            order = range(len(points))
+            order = range(n_points)
         
         if dbg:
             print('Finding vertices...')
@@ -57,14 +65,14 @@ class BallMapper():
         for idx_p in pbar:
             
             # current point
-            p = points[idx_p]
+            p = f(idx_p)
             
             pbar.set_description("{} vertices found".format(centers_counter))
             
             is_covered = False
 
             for idx_v in landmarks:
-                if distance(p, points[landmarks[idx_v]]) <= epsilon:
+                if distance(p, f(landmarks[idx_v])) <= epsilon:
                     is_covered = True
                     break
 
@@ -85,7 +93,7 @@ class BallMapper():
         for idx_v in tqdm(landmarks, disable=not(dbg)):
             self.points_covered_by_landmarks[idx_v] = []
             for idx_p in order:
-                if distance(points[idx_p], points[landmarks[idx_v]]) <= epsilon:
+                if distance(f(idx_p), f(landmarks[idx_v])) <= epsilon:
                     self.points_covered_by_landmarks[idx_v].append(idx_p)
                 
         # find edges
@@ -129,11 +137,11 @@ class BallMapper():
     def add_coloring(self, coloring_df, add_std=False):
         # for each column in the dataframe compute the mean across all nodes and add it as mean attributes
         for node in self.Graph.nodes:
-            for name, avg in coloring_df.loc[self.Graph.nodes[node]['points covered']].mean(numeric_only=True).iteritems():
+            for name, avg in coloring_df.loc[self.Graph.nodes[node]['points covered']].mean().iteritems():
                 self.Graph.nodes[node][name] = avg
             # option to add the standar deviation on each node
             if add_std:
-                for name, std in coloring_df.loc[self.Graph.nodes[node]['points covered']].std(numeric_only=True).iteritems():
+                for name, std in coloring_df.loc[self.Graph.nodes[node]['points covered']].std().iteritems():
                     self.Graph.nodes[node]['{}_std'.format(name)] = std
 
             
