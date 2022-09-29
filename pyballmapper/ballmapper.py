@@ -129,11 +129,11 @@ class BallMapper():
     def add_coloring(self, coloring_df, add_std=False):
         # for each column in the dataframe compute the mean across all nodes and add it as mean attributes
         for node in self.Graph.nodes:
-            for name, avg in coloring_df.loc[self.Graph.nodes[node]['points covered']].mean().iteritems():
+            for name, avg in coloring_df.loc[self.Graph.nodes[node]['points covered']].mean(numeric_only=True).iteritems():
                 self.Graph.nodes[node][name] = avg
             # option to add the standar deviation on each node
             if add_std:
-                for name, std in coloring_df.loc[self.Graph.nodes[node]['points covered']].std().iteritems():
+                for name, std in coloring_df.loc[self.Graph.nodes[node]['points covered']].std(numeric_only=True).iteritems():
                     self.Graph.nodes[node]['{}_std'.format(name)] = std
 
             
