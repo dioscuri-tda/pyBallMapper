@@ -7,7 +7,7 @@ from matplotlib import cm
 
 import warnings
 
-from tqdm.notebook import tqdm
+from tqdm.auto import tqdm
 
 
 
@@ -240,17 +240,16 @@ class BallMapper():
             the options allowed by :func:`sklearn.metrics.pairwise_distances` for
             its metric parameter.
             If metric is "precomputed", X is assumed to be a distance matrix and
-            must be square. X may be a :term:`sparse graph`, in which
-            case only "nonzero" elements may be considered neighbors for DBSCAN.
+            must be square.
 
             """
         
         self.eps = eps
 
+        # find ladmarks
         landmarks, self.points_covered_by_landmarks = find_landmarks(X, eps, orbits, metric, 
                                                                      order, knn, dbg)
-                    
-                
+                                
         # find edges
         if dbg:
             print('Finding edges...')
@@ -277,7 +276,7 @@ class BallMapper():
        
         for node in self.Graph.nodes:
             self.Graph.nodes[node]['landmark'] = landmarks[node]
-            self.Graph.nodes[node]['points covered'] = self.points_covered_by_landmarks[node]
+            self.Graph.nodes[node]['points covered'] = np.array(self.points_covered_by_landmarks[node])
             self.Graph.nodes[node]['size'] = len(self.Graph.nodes[node]['points covered'])
             # TODO move the display sizing to the plotting utils
             # rescale the size for display
@@ -353,71 +352,3 @@ class BallMapper():
             plt.colorbar(sm, ax=this_ax)
 
         return this_ax
-
-
-
-
-
-
-# mapper on BM using DBscan as clustering algo
-# it uses scipy csr sparse matrix to speed up computations
-# inputs:
-#     cover_BM        ball mapper graph
-#     target_space    numpy array where to pull back elements in the BM
-#     eps             radius for the DBscan algo
-#     min_samples     min number of elements in a cluster that make it a cluster and not noise
-# https://scikit-learn.org/stable/modules/generated/sklearn.cluster.DBSCAN.html
-
-
-from sklearn.cluster import DBSCAN
-from scipy.sparse import csr_matrix
-
-
-def mapper_on_BM(cover_BM, target_space, eps, min_samples=1, dbscan_metric='euclidean', sparse=False, dbg=False):
-    new_graph = nx.Graph()
-
-    # creates a sparse CSR matrix
-    if sparse:
-        target_space = csr_matrix(target_space)
-
-    for node in tqdm(cover_BM.nodes):
-        X = target_space[cover_BM.nodes[node]['points covered'], :]
-
-        db = DBSCAN(eps=eps, min_samples=min_samples, metric=dbscan_metric).fit(X)
-        # create a set of unique labels
-        labels = set(db.labels_) - {-1} # outliers are not clusters
-
-        if dbg: 
-            print('\n **********')
-            print(node, X.shape[0], labels)
-
-        # for each cluster
-        # add a new vertex to the new graph
-        for cluster in labels:
-            if dbg:
-                # print the number of points in the cluster
-                print('\t', cluster, (db.labels_ == cluster).sum())
-
-            # retrives the indices of the points_covered by the cluster
-            points_covered_by_cluster = cover_BM.nodes[node]['points covered'][np.where(db.labels_ == cluster)]
-            # creates a node
-            new_graph.add_node(str(node)+'_'+str(cluster),
-                               points_covered=points_covered_by_cluster)
-
-        for neigh in [v for v in nx.neighbors(cover_BM, node) if v > node]:
-            neigh_X = target_space[cover_BM.nodes[neigh]['points covered'], :]
-
-            neigh_db = DBSCAN(eps=eps, min_samples=min_samples, metric=dbscan_metric).fit(neigh_X)
-            neigh_labels = set(neigh_db.labels_) - {-1} # outliers are not clusters
-
-            # add edges between clusters that belongs to neigh in the original graph
-            # if they share at least one element
-            for cluster in labels:
-                for neigh_cluster in neigh_labels:
-                    points_covered_by_cluster = cover_BM.nodes[node]['points covered'][np.where(db.labels_== cluster)]
-                    points_covered_by_neigh= cover_BM.nodes[neigh]['points covered'][np.where(neigh_db.labels_ == neigh_cluster)]
-                    if len( set(points_covered_by_cluster)&set(points_covered_by_neigh) ) != 0:
-                        new_graph.add_edge(str(node)+'_'+str(cluster), str(neigh)+'_'+str(neigh_cluster) )
-
-
-    return new_graph
