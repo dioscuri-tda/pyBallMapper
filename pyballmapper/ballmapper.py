@@ -108,11 +108,7 @@ def _find_landmarks_balls(X, eps, orbits=None, metric=None, order=None, dbg=Fals
 
 
 
-
 def _find_landmarks_knn(X, knn, metric='euclidean', orbits=None, order=None, dbg=False):
-
-    from sklearn.neighbors import NearestNeighbors
-    neigh = NearestNeighbors(n_neighbors=knn, algorithm='auto', metric=metric).fit(X)
     
     # check wheter order is a list of lenght = len(points)
     # otherwise use the defaut ordering
@@ -128,6 +124,21 @@ def _find_landmarks_knn(X, knn, metric='euclidean', orbits=None, order=None, dbg
             order = range(n_points)
     else:
         order = range(n_points)
+
+    
+    # set the distance function
+    f = lambda i : X[i]
+    if metric == 'euclidean':
+        distance = lambda x, y : np.linalg.norm(x - y)
+
+    elif metric == 'precomputed':
+        distance = lambda x, y : X[x,y]
+        f = lambda i : i
+        if dbg: print('using precomputed distance matrix')
+
+    else:
+        distance = metric
+        if dbg: print('using custom distance {}'.format(distance))
 
 
     # set the orbits
@@ -152,17 +163,13 @@ def _find_landmarks_knn(X, knn, metric='euclidean', orbits=None, order=None, dbg
     for i in range(len(X)):
         points_covered[i] = False
 
-    if metric=='precomputed':
-        f = lambda i : i
-    else:
-        f = lambda i : X[i]
-
      # find landmark points
     landmarks = {} # dict of points {idx_v: idx_p, ... }
     points_covered_by_landmarks = dict()
     centers_counter = 0
 
     pbar = tqdm(order, disable=not(dbg))
+
     for idx_p in pbar:
         pbar.set_description("{} vertices found".format(centers_counter))
         
@@ -170,7 +177,11 @@ def _find_landmarks_knn(X, knn, metric='euclidean', orbits=None, order=None, dbg
             continue
         else:
             # current point is not covered
-            points_covered_by_landmarks[centers_counter] = neigh.kneighbors([f(idx_p)], return_distance=False)[0]
+
+            # find the k nearest neighbours of idx_p
+            d_list = [distance(f(idx_p), f(v)) for v in order]
+            points_covered_by_landmarks[centers_counter] = np.argsort(np.argsort(d_list[:knn]))
+
             for n in points_covered_by_landmarks[centers_counter]:
                 points_covered[n] = True
 
@@ -181,7 +192,11 @@ def _find_landmarks_knn(X, knn, metric='euclidean', orbits=None, order=None, dbg
             if points_have_orbits:
                 for idx_p_o in orbits[idx_p]:
                     if idx_p_o != idx_p:
-                        points_covered_by_landmarks[centers_counter] = neigh.kneighbors([f(idx_p_o)], return_distance=False)[0]
+
+                        # find the k nearest neighbours of idx_p_o
+                        d_list = [distance(f(idx_p_o), f(v)) for v in order]
+                        points_covered_by_landmarks[centers_counter] = np.argsort(np.argsort(d_list[:knn]))
+
                         for n in points_covered_by_landmarks[centers_counter]:
                             points_covered[n] = True
 
