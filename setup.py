@@ -5,7 +5,7 @@ with open('README.md') as f:
 
 setup(
     name='pyBallMapper',
-    version='0.2_dev',
+    version='0.2',
     author='Davide Gurnari',
     author_email='davide.gurnari@gmail.com',
     packages=['pyballmapper', 'pyballmapper.tests'],
@@ -19,6 +19,8 @@ setup(
         'pandas',
         'networkx',
         'matplotlib',
-        'bokeh'
+        'bokeh',
+        'numba',
+        'scikit-learn'
     ],
 )

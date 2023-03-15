@@ -67,7 +67,8 @@ def MoBM(cover_BM, target_space, eps, min_samples=1, dbscan_metric='euclidean', 
                     if len( set(points_covered_by_cluster)&set(points_covered_by_neigh) ) != 0:
                         new_graph.add_edge(str(node)+'_'+str(cluster), str(neigh)+'_'+str(neigh_cluster) )
 
-    
+    # TODO: find a better way of creating a BM object
+    # here I am just creating a BM with one point and then replacing its Graph
     fake_bm = BallMapper([0], eps=0)
     fake_bm.Graph = new_graph
 

@@ -17,7 +17,6 @@ from bokeh.models import (BoxZoomTool, Circle, HoverTool,
                           ColorBar, LinearColorMapper
                           )
 
-#from bokeh.palettes import linear_palette, Reds256, Turbo256
 from bokeh.plotting import from_networkx, figure, curdoc
 
 
@@ -141,101 +140,3 @@ class graph_GUI():
                              label_standoff=12)
 
         self.plot.add_layout(color_bar, 'right')
-        
-        
-        
-
-        
-        
-        
-        
-# ## Read the graphs
-
-# Each graph must be rapresented by an adjecency list (space separated)
-# We assume nodes are numbered from 1 to N
-#
-# The list of points covereb by each node is a file with N lines, each line contains the points id (space separated)
-
-def read_graph_from_list(GRAPH_ADJ_PATH, GRAPH_POINTS_PATH,
-                         values_df=None,
-                         add_points_covered=False,
-                         MIN_SCALE = 7,
-                         MAX_SCALE = 20):
-    # read graph adjecency list
-    # G_dummy is needed because I want the nodes to be ordered
-    # ASSUME NODES ARE NUMBERED FROM 1 TO N
-    print('loading edgelist')
-    G_dummy = nx.read_adjlist(GRAPH_ADJ_PATH, nodetype = int,
-                              delimiter=' ')
-
-    # read list of points covered by each node
-    # ASSUME NODES ARE NUMBERED FROM 1 TO N
-    csv_file = open(GRAPH_POINTS_PATH)
-    reader = csv.reader(csv_file)
-
-    points_covered = {}
-    MAX_NODE_SIZE = 0
-    print('loading points covered')
-    for i, line_list in tqdm(enumerate(reader)):
-        points_covered[i+1] = [int(node) for node in line_list[0].split(' ')]
-        if len(points_covered[i+1]) > MAX_NODE_SIZE:
-            MAX_NODE_SIZE = len(points_covered[i+1])
-    
-    # add the nodes that are not in the edgelist
-    G = nx.Graph()
-    G.add_nodes_from( range(1, len(points_covered) + 1) )
-    G.add_edges_from(G_dummy.edges)
-
-    print('computing coloring')
-    for node in tqdm(G.nodes):
-        if add_points_covered:
-            G.nodes[node]['points covered'] = points_covered[node]
-        G.nodes[node]['size'] = len(points_covered[node])
-        # rescale the size for display
-        G.nodes[node]['size rescaled'] = MAX_SCALE*G.nodes[node]['size']/MAX_NODE_SIZE + MIN_SCALE
-
-        if isinstance(values_df, pd.DataFrame):
-            for name, avg in values_df.loc[points_covered[node]].mean().iteritems():
-                G.nodes[node][name] = avg
-#             if values_df.loc[points_covered[node]][name].isna().any():
-#                 G.nodes[node][name] = np.nan
-            
-#         for name, var in values_df.loc[points_covered[node]].var().iteritems():
-#             if pd.isna(var):
-#                 var = 0
-#             G.nodes[node][name+'_var'] = var
-
-    return G
-
-
-
-# ## Read the graphs from pickle
-
-def read_graph_from_pickle(GRAPH_PATH,
-                           values_df=None,
-                           add_points_covered=False,
-                          MIN_SCALE = 7,
-                          MAX_SCALE = 20):
-    # read graph 
-    print('loading graph from pickle')
-    G = nx.read_gpickle(GRAPH_PATH)
-
-    MAX_NODE_SIZE = 0
-    for node in G.nodes:
-        if len(G.nodes[node]['points_covered']) > MAX_NODE_SIZE:
-            MAX_NODE_SIZE = len(G.nodes[node]['points_covered'])
-
-    print('computing coloring')        
-    for node in tqdm(G.nodes):
-        G.nodes[node]['size'] = len(G.nodes[node]['points_covered'])
-        # rescale the size for display
-        G.nodes[node]['size rescaled'] = MAX_SCALE*G.nodes[node]['size']/MAX_NODE_SIZE + MIN_SCALE
-
-        if isinstance(values_df, pd.DataFrame):
-            for name, avg in values_df.loc[G.nodes[node]['points_covered']].mean().iteritems():
-                G.nodes[node][name] = avg
-        
-        if not add_points_covered:
-            del G.nodes[node]['points_covered']
-
-    return G
