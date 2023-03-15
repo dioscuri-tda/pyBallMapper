@@ -262,15 +262,15 @@ class BallMapper:
         ----------
 
         Graph: NetworkX Graph object
-            The BallMapper graph. Each node correspond to a covering ball and has attributes:
-                'landmark' the id of the corresponding landmark point
-                'points covered' the ids of the points covered by the corresponding ball
+            The BallMapper graph. Each node correspond to a covering ball and has attributes: \
+            'landmark' the id of the corresponding landmark point \
+            'points covered' the ids of the points covered by the corresponding ball
 
         eps: float
             The input radius of the balls.
 
         points_covered_by_landmarks: dict
-            keys: landmarks ids
+            keys: landmarks ids \
             values: list of ids of the points covered by the corresponding ball
 
         Notes
@@ -397,7 +397,7 @@ class BallMapper:
                 else:
                     self.Graph.nodes[node]["color"] = "black"
 
-    def draw_networx(
+    def draw_networkx(
         self,
         coloring_variable=None,
         color_palette=cm.get_cmap(name="Reds"),
