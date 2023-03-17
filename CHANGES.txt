@@ -1,1 +1,3 @@
-v0.0.1, 2022-06-10 -- Initial release.
+v0.1, 2022-06-10 -- Initial release.
+
+v0.2, 2023-03-17 -- Added Mapper on BallMapper construction, Equivariant BallMapper and ability to change the orderer of points.
