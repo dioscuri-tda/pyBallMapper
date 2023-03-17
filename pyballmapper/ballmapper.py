@@ -400,7 +400,7 @@ class BallMapper:
     def draw_networkx(
         self,
         coloring_variable=None,
-        color_palette=cm.get_cmap(name="Reds"),
+        color_palette=cm.get_cmap("Reds"),
         colorbar=False,
         this_ax=None,
         MIN_SCALE=100,  # default in nx.draw_networkx is 300
