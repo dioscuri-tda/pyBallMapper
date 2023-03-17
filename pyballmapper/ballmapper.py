@@ -3,7 +3,7 @@ import pandas as pd
 import networkx as nx
 
 import matplotlib.pyplot as plt
-from matplotlib import cm
+from matplotlib import colormaps as cm
 
 import warnings
 

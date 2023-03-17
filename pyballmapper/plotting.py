@@ -139,14 +139,19 @@ class graph_GUI:
 
         self.bokeh_graph = _create_bokeh_graph(graph, my_palette, MIN_SIZE, MAX_SIZE)
 
-        self.plot = Plot(
-            plot_width=figsize[0],
-            plot_height=figsize[1],
+        self.plot = figure(
+            width=figsize[0],
+            height=figsize[1],
             x_range=Range1d(-1, 1),
             y_range=Range1d(-1, 1),
             output_backend=output_format,
         )
-        # sizing_mode="stretch_both")
+
+        self.plot.xaxis.visible = False
+        self.plot.yaxis.visible = False
+
+        self.plot.xgrid.visible = False
+        self.plot.ygrid.visible = False
 
         tooltips = [("index", "@index"), ("size", "@size")]
 
@@ -182,7 +187,9 @@ class graph_GUI:
         self.plot.renderers.append(self.graph_renderer)
 
     # this function changes the coloring of the nodes
-    def color_by_variable(self, variable, MIN_VALUE=np.inf, MAX_VALUE=-np.inf, logscale=False):
+    def color_by_variable(
+        self, variable, MIN_VALUE=np.inf, MAX_VALUE=-np.inf, logscale=False
+    ):
         """Color the BallMapper Bokeh plot nodes using a specific variable.
 
         Coloring data can be added using the `BallMapper.add_coloring()` method.
