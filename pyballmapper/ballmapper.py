@@ -228,7 +228,7 @@ class BallMapper:
         """Create a BallMapper graph from vector array or distance matrix.
 
         Parameters
-        ----------
+        -----------
         X : {array-like, sparse matrix} of shape (n_samples, n_features) \
                 or (n_samples, n_samples)
             Data vectors, where `n_samples` is the number of samples
@@ -259,7 +259,7 @@ class BallMapper:
             Enable verbose output. Set it to 'tqdm' to show a tqdm progressbar.
 
         Attributes
-        ----------
+        ------------
 
         Graph: NetworkX Graph object
             The BallMapper graph. Each node correspond to a covering ball and has attributes: \

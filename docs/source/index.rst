@@ -7,8 +7,8 @@ Welcome to pyBallMapper's documentation!
 ========================================
 
 .. toctree::
-   :maxdepth: 1
-   :caption: Contents:
-
-   modules
-
+  :maxdepth: 1
+  
+  getting_started.md
+  tutorials.md
+  modules.rst

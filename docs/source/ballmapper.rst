@@ -1,5 +1,5 @@
 BallMapper
-------------------------------
+===========
 
 .. automodule:: pyballmapper.ballmapper
    :members:

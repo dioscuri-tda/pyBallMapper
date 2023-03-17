@@ -1,5 +1,5 @@
 Mapper on BallMapper
-------------------------
+=====================
 
 .. automodule:: pyballmapper.mobm
    :members:
