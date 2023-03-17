@@ -40,7 +40,6 @@ exclude_patterns = []
 autoclass_content = "both"
 
 autodoc_mock_imports = [
-    "numpy",
     "pandas",
     "networkx",
     "numba",
