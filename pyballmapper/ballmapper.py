@@ -295,15 +295,9 @@ class BallMapper:
             enumerate(list(landmarks.keys())[:-1]), disable=not (verbose == "tqdm")
         ):
             for idx_u in list(landmarks.keys())[i + 1 :]:
-                if (
-                    len(
-                        set(self.points_covered_by_landmarks[idx_v]).intersection(
-                            self.points_covered_by_landmarks[idx_u]
-                        )
-                    )
-                    != 0
-                ):
-                    edges.append([idx_v, idx_u])
+                len_intersection = len(set(self.points_covered_by_landmarks[idx_v]).intersection(self.points_covered_by_landmarks[idx_u]))
+                if len_intersection > 0:
+                    edges.append([idx_v, idx_u, {'size': len_intersection}])
 
         # create Ball Mapper graph
         if verbose:

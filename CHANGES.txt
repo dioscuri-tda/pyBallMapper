@@ -1,3 +1,5 @@
 v0.1, 2022-06-10 -- Initial release.
 
 v0.2, 2023-03-17 -- Added Mapper on BallMapper construction, Equivariant BallMapper and ability to change the orderer of points.
+
+v0.2.1 2023-04-17 -- Added edges' size and ability to plot only a subset of edges.

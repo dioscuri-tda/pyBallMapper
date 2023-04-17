@@ -30,18 +30,26 @@ from bokeh.plotting import from_networkx, figure, curdoc
 
 
 # creates a nx graph that bokeh can plot
-def _create_bokeh_graph(G, my_palette, MIN_SIZE=7, MAX_SIZE=20):
+def _create_bokeh_graph(G, my_palette, edgelist=False, MIN_SIZE=7, MAX_SIZE=20):
     MAX_NODE_SIZE = max([G.nodes[node]["size"] for node in G.nodes])
 
-    for node in G.nodes:
+    bokeh_G = nx.Graph()
+    bokeh_G.add_nodes_from(G.nodes(data=True))
+
+    if edgelist:
+        bokeh_G.add_edges_from(edgelist)
+    else:
+        bokeh_G.add_edges_from(G.edges(data=True))
+
+    for node in bokeh_G.nodes:
         # rescale the size for display
-        G.nodes[node]["size rescaled"] = (
-            MAX_SIZE * G.nodes[node]["size"] / MAX_NODE_SIZE + MIN_SIZE
+        bokeh_G.nodes[node]["size rescaled"] = (
+            MAX_SIZE * bokeh_G.nodes[node]["size"] / MAX_NODE_SIZE + MIN_SIZE
         )
 
-        G.nodes[node]["color"] = to_hex(my_palette(0))
+        bokeh_G.nodes[node]["color"] = to_hex(my_palette(0))
 
-    return G
+    return bokeh_G
 
 
 def _color_nodes(
@@ -80,6 +88,7 @@ class graph_GUI:
         self,
         graph,
         my_palette,
+        edgelist=False,
         tooltips_variables=[],
         figsize=(800, 600),
         output_format="svg",
@@ -137,7 +146,7 @@ class graph_GUI:
         """
         self.my_palette = my_palette
 
-        self.bokeh_graph = _create_bokeh_graph(graph, my_palette, MIN_SIZE, MAX_SIZE)
+        self.bokeh_graph = _create_bokeh_graph(graph, my_palette, edgelist=edgelist, MIN_SIZE=MIN_SIZE, MAX_SIZE=MAX_SIZE)
 
         self.plot = figure(
             width=figsize[0],
@@ -172,7 +181,6 @@ class graph_GUI:
             center=(0, 0),
             iterations=render_iterations,
         )
-        # k= 10/np.sqrt(len(self.bokeh_graph.nodes)),
 
         # nodes
         self.graph_renderer.node_renderer.glyph = Circle(
