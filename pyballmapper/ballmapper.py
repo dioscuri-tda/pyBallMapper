@@ -11,6 +11,8 @@ from tqdm.auto import tqdm
 
 from numba import njit
 
+import copy
+
 
 @njit
 def _euclid_distance(x, y):
@@ -397,6 +399,27 @@ class BallMapper:
                 else:
                     self.Graph.nodes[node]["color"] = "black"
 
+
+    def filter_by(self, list_of_points):
+
+        filtered_bm = copy.deepcopy(self)
+
+        for node in filtered_bm.Graph.nodes:
+            filtered_bm.points_covered_by_landmarks[node] = list(set(filtered_bm.points_covered_by_landmarks[node]).intersection(list_of_points))
+            filtered_bm.Graph.nodes[node]["points covered"] = np.array(
+                filtered_bm.points_covered_by_landmarks[node]
+            )
+
+            filtered_bm.Graph.nodes[node]["size"] = len(
+                filtered_bm.Graph.nodes[node]["points covered"]
+            )
+
+        filtered_bm.Graph.remove_nodes_from([node for node in filtered_bm.Graph if filtered_bm.Graph.nodes[node]["size"] == 0])
+
+        return filtered_bm
+
+        
+
     def draw_networkx(
         self,
         coloring_variable=None,
@@ -405,6 +428,7 @@ class BallMapper:
         this_ax=None,
         MIN_SCALE=100,  # default in nx.draw_networkx is 300
         MAX_SCALE=600,
+        pos=None,
         **kwargs
     ):
         MAX_NODE_SIZE = max(
@@ -416,9 +440,12 @@ class BallMapper:
 
         self.color_by_variable(coloring_variable, color_palette)
 
+        if pos is None:
+            pos=nx.spring_layout(self.Graph, seed=24)
+
         nx.draw_networkx(
             self.Graph,
-            pos=nx.spring_layout(self.Graph, seed=24),
+            pos=pos,
             node_color=[self.Graph.nodes[node]["color"] for node in self.Graph.nodes],
             node_size=[
                 MAX_SCALE * self.Graph.nodes[node]["size"] / MAX_NODE_SIZE + MIN_SCALE
