@@ -370,12 +370,19 @@ class BallMapper:
             Wheter to compute also the standard deviation on each ball.
         
         """
+
+
+        # get the coloring variables
+        for k in self.Graph.nodes:
+            node_keys = self.Graph.nodes[k].keys()
+            break
+
         if my_variable is None:
             for node in self.Graph.nodes:
                 self.Graph.nodes[node]["color"] = cm.get_cmap("tab10")(0)
 
         elif (
-            my_variable not in self.Graph.nodes[1].keys()
+            my_variable not in node_keys
         ):  # TODO find a better way to check
             warnings.warn(
                 "Warning........... {} is not a valid coloring, add it using the `add_coloring` method".format(
@@ -398,6 +405,8 @@ class BallMapper:
                     self.Graph.nodes[node]["color"] = my_palette(color_id)
                 else:
                     self.Graph.nodes[node]["color"] = "black"
+
+        return MIN_VALUE, MAX_VALUE
 
 
     def filter_by(self, list_of_points):
@@ -426,6 +435,8 @@ class BallMapper:
         color_palette=cm.get_cmap("Reds"),
         colorbar=False,
         this_ax=None,
+        MIN_VALUE=np.inf,
+        MAX_VALUE=-np.inf,
         MIN_SCALE=100,  # default in nx.draw_networkx is 300
         MAX_SCALE=600,
         pos=None,
@@ -438,7 +449,7 @@ class BallMapper:
         if this_ax == None:
             this_ax = plt.gca()
 
-        self.color_by_variable(coloring_variable, color_palette)
+        MIN_VALUE, MAX_VALUE = self.color_by_variable(coloring_variable, color_palette, MIN_VALUE, MAX_VALUE)
 
         if pos is None:
             pos=nx.spring_layout(self.Graph, seed=24)
@@ -461,18 +472,8 @@ class BallMapper:
             sm = plt.cm.ScalarMappable(
                 cmap=color_palette,
                 norm=plt.Normalize(
-                    vmin=min(
-                        [
-                            self.Graph.nodes[node][coloring_variable]
-                            for node in self.Graph.nodes
-                        ]
-                    ),
-                    vmax=max(
-                        [
-                            self.Graph.nodes[node][coloring_variable]
-                            for node in self.Graph.nodes
-                        ]
-                    ),
+                    vmin=MIN_VALUE,
+                    vmax=MAX_VALUE,
                 ),
             )
             plt.colorbar(sm, ax=this_ax)
