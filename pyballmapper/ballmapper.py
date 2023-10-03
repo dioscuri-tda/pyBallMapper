@@ -220,7 +220,7 @@ def _find_landmarks(X, eps=None, orbits=None, metric=None, order=None, verbose=F
 class BallMapper:
     def __init__(
         self,
-        X,
+        X: np.ndarray,
         eps,
         orbits=None,
         metric="euclidean",
@@ -282,6 +282,10 @@ class BallMapper:
         """
 
         self.eps = eps
+
+        if X.dtype != float:
+            warnings.warn("Warning..........the dtype of the input data is {}, not float. Change it to float if you want to use the default numba euclidean distance.".format(X.dtype))
+
 
         # find ladmarks
         landmarks, self.points_covered_by_landmarks = _find_landmarks(
