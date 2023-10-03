@@ -263,6 +263,20 @@ class graph_GUI:
 
 
 def kmapper_visualize(bm, coloring_df, path_html='output.html', title=None, **kwargs):
+    """leverages kepler-mapper visualization tool to produce an interactive html.
+    https://kepler-mapper.scikit-tda.org
+
+    Parameters
+    ----------
+    bm : BallMapper
+        the BallMapper graph to plot
+    coloring_df : pandas.DataFrame
+        pandas dataframe of shape (n_samples, n_coloring_function)
+    path_html : str, optional
+        the output file, by default 'output.html'
+    title : string, optional
+        title to be displayed in the top bar, by default None
+    """
     import kmapper as km
     from collections import defaultdict
 
