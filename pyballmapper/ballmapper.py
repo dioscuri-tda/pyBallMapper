@@ -464,12 +464,12 @@ class BallMapper:
         return filtered_bm
     
     def points_and_balls(self):
-        """returns a DataFrame with 
+        """returns a DataFrame with the `points_covered_by_landmarks` information
 
         Returns
         -------
-        _type_
-            _description_
+        pandas.DataFrame
+            
         """
         to_df = []
         for ball, points in self.points_covered_by_landmarks.items():
