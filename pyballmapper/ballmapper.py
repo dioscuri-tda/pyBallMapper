@@ -284,8 +284,11 @@ class BallMapper:
         self.eps = eps
 
         if X.dtype != float:
-            warnings.warn("Warning..........the dtype of the input data is {}, not float. Change it to float if you want to use the default numba euclidean distance.".format(X.dtype))
-
+            warnings.warn(
+                "Warning..........the dtype of the input data is {}, not float. Change it to float if you want to use the default numba euclidean distance.".format(
+                    X.dtype
+                )
+            )
 
         # find ladmarks
         landmarks, self.points_covered_by_landmarks = _find_landmarks(
@@ -330,51 +333,61 @@ class BallMapper:
         if verbose:
             print("Done")
 
-    def add_coloring(self, coloring_df, add_std=False):
-        """ Takes pandas dataframe and compute the average and standard deviation \
+    def add_coloring(self, coloring_df, custom_function=np.mean, custom_name=None, add_std=False):
+        """Takes pandas dataframe and compute the average and standard deviation \
         of each column for the subset of points colored by each ball.
         Add such values as attributes to each node in the BallMapper graph
 
         Parameters
         ----------
         coloring_df: pandas dataframe of shape (n_samples, n_coloring_function)
-
+        custom_function : callable, optional
+            a function to compute on the `coloring_df` columns, by default numpy.mean
+        custom_name : string, optional
+            sets the attributes naming scheme, by default None, the attribute names will be the column names
         add_std: bool, default=False
-            Wheter to compute also the standard deviation on each ball.
-        
+            Wheter to compute also the standard deviation on each ball
         """
         # for each column in the dataframe compute the mean across all nodes and add it as mean attributes
         for node in self.Graph.nodes:
-            for name, avg in (
-                coloring_df.loc[self.Graph.nodes[node]["points covered"]].mean().items()
-            ):
+            for col_name, avg in (
+                coloring_df.loc[self.Graph.nodes[node]["points covered"]].apply(custom_function, axis=0).items()
+            ):  
+                if custom_name:
+                    name = '{}_{}'.format(col_name, custom_name)
+                else:
+                    name = col_name
                 self.Graph.nodes[node][name] = avg
             # option to add the standar deviation on each node
             if add_std:
-                for name, std in (
+                for col_name, std in (
                     coloring_df.loc[self.Graph.nodes[node]["points covered"]]
                     .std()
                     .items()
                 ):
-                    self.Graph.nodes[node]["{}_std".format(name)] = std
+                    self.Graph.nodes[node]["{}_std".format(col_name)] = std
 
     def color_by_variable(
         self, my_variable, my_palette, MIN_VALUE=np.inf, MAX_VALUE=-np.inf
     ):
-        """ Takes pandas dataframe and compute the average and standard deviation \
-        of each column for the subset of points colored by each ball.
-        Add such values as attributes to each node in the BallMapper graph
-
+        """Colors the BallMapper graph using a specified variable. The `add_coloring` method needs to be called first. Automatically computes the min and max value for the colormap.
+        
         Parameters
         ----------
-        my_variable: string
-            
+        my_variable : string
+            the variable to color by
+        my_palette : matplotlib.colors.Colormap
+            a valid colormap
+        MIN_VALUE : float, optional
+            the value to be assigned to the lowest color in the cmap, by default np.inf
+        MAX_VALUE : float, optional
+            the value to be assigned to the highest color in the cmap, by default -np.inf
 
-        add_std: bool, default=False
-            Wheter to compute also the standard deviation on each ball.
-        
+        Returns
+        -------
+        MIN_VALUE, MAX_VALUE
+            the computed min and max values of `my_variable` on the BM nodes, useful to set the limits for a colorbar
         """
-
 
         # get the coloring variables
         for k in self.Graph.nodes:
@@ -385,9 +398,7 @@ class BallMapper:
             for node in self.Graph.nodes:
                 self.Graph.nodes[node]["color"] = cm.get_cmap("tab10")(0)
 
-        elif (
-            my_variable not in node_keys
-        ):  # TODO find a better way to check
+        elif my_variable not in node_keys:  # TODO find a better way to check
             warnings.warn(
                 "Warning........... {} is not a valid coloring, add it using the `add_coloring` method".format(
                     my_variable
@@ -412,13 +423,28 @@ class BallMapper:
 
         return MIN_VALUE, MAX_VALUE
 
-
     def filter_by(self, list_of_points):
+        """return a copy of the BallMapper object with only the nodes covering a subset of points
+
+        Parameters
+        ----------
+        list_of_points : list
+            list of the subset of points to keep
+
+        Returns
+        -------
+        BallMapper
+            the filtered BallMapper graph
+        """
 
         filtered_bm = copy.deepcopy(self)
 
         for node in filtered_bm.Graph.nodes:
-            filtered_bm.points_covered_by_landmarks[node] = list(set(filtered_bm.points_covered_by_landmarks[node]).intersection(list_of_points))
+            filtered_bm.points_covered_by_landmarks[node] = list(
+                set(filtered_bm.points_covered_by_landmarks[node]).intersection(
+                    list_of_points
+                )
+            )
             filtered_bm.Graph.nodes[node]["points covered"] = np.array(
                 filtered_bm.points_covered_by_landmarks[node]
             )
@@ -427,17 +453,37 @@ class BallMapper:
                 filtered_bm.Graph.nodes[node]["points covered"]
             )
 
-        filtered_bm.Graph.remove_nodes_from([node for node in filtered_bm.Graph if filtered_bm.Graph.nodes[node]["size"] == 0])
+        filtered_bm.Graph.remove_nodes_from(
+            [
+                node
+                for node in filtered_bm.Graph
+                if filtered_bm.Graph.nodes[node]["size"] == 0
+            ]
+        )
 
         return filtered_bm
+    
+    def points_and_balls(self):
+        """returns a DataFrame with 
 
-        
+        Returns
+        -------
+        _type_
+            _description_
+        """
+        to_df = []
+        for ball, points in self.points_covered_by_landmarks.items():
+            for p in points:
+                to_df.append([p, ball])
+
+        return pd.DataFrame(to_df, columns=['point', 'ball'])
 
     def draw_networkx(
         self,
         coloring_variable=None,
         color_palette=cm.get_cmap("Reds"),
         colorbar=False,
+        colorbar_label=None,
         this_ax=None,
         MIN_VALUE=np.inf,
         MAX_VALUE=-np.inf,
@@ -446,6 +492,37 @@ class BallMapper:
         pos=None,
         **kwargs
     ):
+        """Wrapper around the `networkx.draw_networkx` method with colorbar support.
+
+        Parameters
+        ----------
+        coloring_variable : string, optional
+            the variable to use for coloring the BM graph, by default None
+        color_palette : matplotlib.colors.Colormap, optional
+            the coloring palette to use, by default cm.get_cmap("Reds")
+        colorbar : bool, optional
+            the label on the colorbar's long axis.
+        colorbar_label : str, optional
+            whether to add a colorbar to the plot, by default False
+        this_ax : matplotlib.axes.Axes, optional
+            the matplotlib ax where to plot the graph. If None, the current ax is used. By default None
+        MIN_VALUE : float, optional
+            the value to be assigned to the lowest color in the cmap, by default np.inf
+        MAX_VALUE : float, optional
+            the value to be assigned to the highest color in the cmap, by default -np.inf
+        MIN_SCALE : int, optional
+            the minimum radius for the nodes, by default 100
+        MIN_SCALE : int, optional
+            the maximum radius for the nodes, by default 100
+        pos : dictionary, optional
+            A dictionary with nodes as keys and positions as values. If not specified a spring layout positioning will be computed. See `networkx.drawing.layout` for functions that compute node positions. By default None
+
+        Returns
+        -------
+        this_ax
+            the matplotlib ax
+        """
+        print(kwargs)
         MAX_NODE_SIZE = max(
             [self.Graph.nodes[node]["size"] for node in self.Graph.nodes]
         )
@@ -453,10 +530,12 @@ class BallMapper:
         if this_ax == None:
             this_ax = plt.gca()
 
-        MIN_VALUE, MAX_VALUE = self.color_by_variable(coloring_variable, color_palette, MIN_VALUE, MAX_VALUE)
+        MIN_VALUE, MAX_VALUE = self.color_by_variable(
+            coloring_variable, color_palette, MIN_VALUE, MAX_VALUE
+        )
 
         if pos is None:
-            pos=nx.spring_layout(self.Graph, seed=24)
+            pos = nx.spring_layout(self.Graph, seed=24)
 
         nx.draw_networkx(
             self.Graph,
@@ -480,6 +559,6 @@ class BallMapper:
                     vmax=MAX_VALUE,
                 ),
             )
-            plt.colorbar(sm, ax=this_ax)
+            plt.colorbar(sm, label=colorbar_label, ax=this_ax)
 
         return this_ax
