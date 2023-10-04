@@ -17,7 +17,7 @@ print(os.getcwd())
 project = "pyBallMapper"
 copyright = "2023, Davide Gurnari"
 author = "Davide Gurnari"
-release = "0.2"
+release = "0.3.1"
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
