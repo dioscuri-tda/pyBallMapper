@@ -27,6 +27,7 @@ extensions = [
     "sphinx.ext.autodoc",
     "sphinx.ext.napoleon",
     "myst_parser",
+    'sphinx_rtd_theme'
 ]
 
 source_suffix = {
