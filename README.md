@@ -7,7 +7,7 @@ Python version of the BallMapper algorithm described in [arXiv:1901.07410 ](http
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="img/jones_17_bm_white.png">
-  <img alt="Shows an illustrated sun in light color mode and a moon with stars in dark color mode." src="img/jones_17_bm.png">
+  <img alt="Jones 17" src="img/jones_17_bm.png">
 </picture>
 
 ### Install the package 📦   
