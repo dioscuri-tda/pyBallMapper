@@ -10,3 +10,6 @@ v0.3.0, 2023-10-03 -- Added option to use KeplerMapper html visualizations.
 
 v0.3.1, 2023-10-03 -- Bugfixes and small improvements 
 
+v0.3.2, 2023-10-05 -- Added MapperonBallMapper class, as a child class of BallMapper 
+
+

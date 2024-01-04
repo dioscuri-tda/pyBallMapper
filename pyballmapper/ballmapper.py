@@ -283,12 +283,7 @@ class BallMapper:
 
         self.eps = eps
 
-        if X.dtype != float:
-            warnings.warn(
-                "Warning..........the dtype of the input data is {}, not float. Change it to float if you want to use the default numba euclidean distance.".format(
-                    X.dtype
-                )
-            )
+        X = np.asanyarray(X, dtype=float)
 
         # find ladmarks
         landmarks, self.points_covered_by_landmarks = _find_landmarks(
