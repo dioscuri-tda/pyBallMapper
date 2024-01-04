@@ -222,6 +222,7 @@ class BallMapper:
         self,
         X: np.ndarray,
         eps,
+        coloring_df=None,
         orbits=None,
         metric="euclidean",
         order=None,
@@ -244,6 +245,10 @@ class BallMapper:
         orbits : list of lenght n_samples, default=None
             For each data points, contains a list of points in its orbit. 
             Use it to create an Equivariant BallMapper.
+
+        coloring_df: pandas dataframe of shape (n_samples, n_coloring_function), default=None
+            If defined, uses the `add_coloring` method to compute the average value 
+            of of each column for the points covered by each ball.
 
         metric : str, or callable, default='euclidean'
             The metric to use when calculating distance between instances in a
@@ -325,10 +330,17 @@ class BallMapper:
                 self.Graph.nodes[node]["points covered"]
             )
 
+        if isinstance(coloring_df, pd.DataFrame):
+            if verbose:
+                print("Computing coloring")
+            self.add_coloring(coloring_df)
+
         if verbose:
             print("Done")
 
-    def add_coloring(self, coloring_df, custom_function=np.mean, custom_name=None, add_std=False):
+    def add_coloring(
+        self, coloring_df, custom_function=np.mean, custom_name=None, add_std=False
+    ):
         """Takes pandas dataframe and compute the average and standard deviation \
         of each column for the subset of points colored by each ball.
         Add such values as attributes to each node in the BallMapper graph
@@ -346,10 +358,12 @@ class BallMapper:
         # for each column in the dataframe compute the mean across all nodes and add it as mean attributes
         for node in self.Graph.nodes:
             for col_name, avg in (
-                coloring_df.loc[self.Graph.nodes[node]["points covered"]].apply(custom_function, axis=0).items()
-            ):  
+                coloring_df.loc[self.Graph.nodes[node]["points covered"]]
+                .apply(custom_function, axis=0)
+                .items()
+            ):
                 if custom_name:
-                    name = '{}_{}'.format(col_name, custom_name)
+                    name = "{}_{}".format(col_name, custom_name)
                 else:
                     name = col_name
                 self.Graph.nodes[node][name] = avg
@@ -366,7 +380,7 @@ class BallMapper:
         self, my_variable, my_palette, MIN_VALUE=np.inf, MAX_VALUE=-np.inf
     ):
         """Colors the BallMapper graph using a specified variable. The `add_coloring` method needs to be called first. Automatically computes the min and max value for the colormap.
-        
+
         Parameters
         ----------
         my_variable : string
@@ -457,21 +471,21 @@ class BallMapper:
         )
 
         return filtered_bm
-    
+
     def points_and_balls(self):
         """returns a DataFrame with the `points_covered_by_landmarks` information
 
         Returns
         -------
         pandas.DataFrame
-            
+
         """
         to_df = []
         for ball, points in self.points_covered_by_landmarks.items():
             for p in points:
                 to_df.append([p, ball])
 
-        return pd.DataFrame(to_df, columns=['point', 'ball'])
+        return pd.DataFrame(to_df, columns=["point", "ball"])
 
     def draw_networkx(
         self,
@@ -517,7 +531,6 @@ class BallMapper:
         this_ax
             the matplotlib ax
         """
-        print(kwargs)
         MAX_NODE_SIZE = max(
             [self.Graph.nodes[node]["size"] for node in self.Graph.nodes]
         )
