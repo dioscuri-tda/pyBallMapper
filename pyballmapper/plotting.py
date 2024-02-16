@@ -262,7 +262,7 @@ class graph_GUI:
         self.plot.add_layout(color_bar, "right")
 
 
-def kmapper_visualize(bm, coloring_df, path_html='output.html', title=None, **kwargs):
+def kmapper_visualize(bm, coloring_df, path_html="output.html", title=None, **kwargs):
     """leverages kepler-mapper visualization tool to produce an interactive html.
     https://kepler-mapper.scikit-tda.org
 
@@ -283,20 +283,21 @@ def kmapper_visualize(bm, coloring_df, path_html='output.html', title=None, **kw
     mapper = km.KeplerMapper(verbose=0)
 
     graph = {}
-    graph['nodes'] = defaultdict(list) 
+    graph["nodes"] = defaultdict(list)
     for n in bm.points_covered_by_landmarks:
-        graph['nodes'][n] = bm.points_covered_by_landmarks[n]
+        graph["nodes"][n] = bm.points_covered_by_landmarks[n]
 
-    graph['links'] = defaultdict(list)
+    graph["links"] = defaultdict(list)
     for u, v in bm.Graph.edges:
-        graph['links'][u].append(v)
+        graph["links"][u].append(v)
 
     graph["meta_data"] = {}
 
     mapper.visualize(
-        graph, path_html=path_html, color_values=coloring_df.to_numpy() ,
+        graph,
+        path_html=path_html,
+        color_values=coloring_df.to_numpy(),
         color_function_name=coloring_df.columns.tolist(),
         title=title,
         **kwargs
     )
-

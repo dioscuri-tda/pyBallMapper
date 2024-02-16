@@ -493,7 +493,7 @@ class BallMapper:
         color_palette=cm.get_cmap("Reds"),
         colorbar=False,
         colorbar_label=None,
-        this_ax=None,
+        ax=None,
         MIN_VALUE=np.inf,
         MAX_VALUE=-np.inf,
         MIN_SCALE=100,  # default in nx.draw_networkx is 300
@@ -513,7 +513,7 @@ class BallMapper:
             the label on the colorbar's long axis.
         colorbar_label : str, optional
             whether to add a colorbar to the plot, by default False
-        this_ax : matplotlib.axes.Axes, optional
+        ax : matplotlib.axes.Axes, optional
             the matplotlib ax where to plot the graph. If None, the current ax is used. By default None
         MIN_VALUE : float, optional
             the value to be assigned to the lowest color in the cmap, by default np.inf
@@ -528,15 +528,15 @@ class BallMapper:
 
         Returns
         -------
-        this_ax
+        ax
             the matplotlib ax
         """
         MAX_NODE_SIZE = max(
             [self.Graph.nodes[node]["size"] for node in self.Graph.nodes]
         )
 
-        if this_ax == None:
-            this_ax = plt.gca()
+        if ax == None:
+            ax = plt.gca()
 
         MIN_VALUE, MAX_VALUE = self.color_by_variable(
             coloring_variable, color_palette, MIN_VALUE, MAX_VALUE
@@ -554,7 +554,7 @@ class BallMapper:
                 for node in self.Graph.nodes
             ],
             alpha=0.8,
-            ax=this_ax,
+            ax=ax,
             **kwargs
         )
 
@@ -567,6 +567,6 @@ class BallMapper:
                     vmax=MAX_VALUE,
                 ),
             )
-            plt.colorbar(sm, label=colorbar_label, ax=this_ax)
+            plt.colorbar(sm, label=colorbar_label, ax=ax)
 
-        return this_ax
+        return ax
