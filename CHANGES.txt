@@ -14,4 +14,6 @@ v0.3.2, 2023-10-05 -- Added MapperonBallMapper class, as a child class of BallMa
 
 v0.3.3, 2024-01-04 -- Added option to compute the coloring directly when creating a BallMapper 
 
+v0.3.4, 2024-04-04 -- Updated plotting to work with Bokeh 3.4.0, added color_edges function to bokeh plots 
+
 

@@ -5,7 +5,7 @@ import networkx as nx
 import csv
 from tqdm.notebook import tqdm
 
-from matplotlib.colors import to_hex
+from matplotlib.colors import to_hex, to_rgb
 
 from bokeh.plotting import figure, show
 
@@ -40,6 +40,9 @@ def _create_bokeh_graph(G, my_palette, MIN_SIZE=7, MAX_SIZE=20):
         )
 
         G.nodes[node]["color"] = to_hex(my_palette(0))
+
+    for edge in G.edges:
+        G.edges[edge]["color"] = to_hex((0, 0, 0))
 
     return G
 
@@ -165,23 +168,22 @@ class graph_GUI:
         self.plot.toolbar.active_scroll = zoom_tool
 
         self.graph_renderer = from_networkx(
-            self.bokeh_graph,
-            nx.spring_layout,
+            graph=self.bokeh_graph,
+            layout_function=nx.spring_layout,
             seed=render_seed,
             scale=1,
             center=(0, 0),
             iterations=render_iterations,
         )
-        # k= 10/np.sqrt(len(self.bokeh_graph.nodes)),
 
-        # nodes
-        self.graph_renderer.node_renderer.glyph = Circle(
-            size="size rescaled", fill_color="color", fill_alpha=0.8
+        self.graph_renderer.node_renderer.glyph.update(
+            size="size rescaled",
+            fill_color="color",
+            fill_alpha=0.8,
         )
 
-        # edges
-        self.graph_renderer.edge_renderer.glyph = MultiLine(
-            line_color="black", line_alpha=0.8, line_width=1
+        self.graph_renderer.edge_renderer.glyph.update(
+            line_color="color", line_alpha=0.8, line_width=1
         )
 
         self.plot.renderers.append(self.graph_renderer)
@@ -229,6 +231,19 @@ class graph_GUI:
         ]
 
         return MIN_VALUE, MAX_VALUE
+
+    def color_edges(self):
+        """color edges by interpolating between the nodes' colors"""
+
+        for edge in self.bokeh_graph.edges:
+            c0 = np.array(to_rgb(self.bokeh_graph.nodes[edge[0]]["color"]))
+            c1 = np.array(to_rgb(self.bokeh_graph.nodes[edge[1]]["color"]))
+
+            self.bokeh_graph.edges[edge]["color"] = to_hex((c0 + c1) / 2)
+
+        self.graph_renderer.edge_renderer.data_source.data["color"] = [
+            self.bokeh_graph.edges[e]["color"] for e in self.bokeh_graph.edges
+        ]
 
     def add_colorbar(self, num_ticks, low, high):
         """Add a colorbar to the right side of the Bokeh plot.
