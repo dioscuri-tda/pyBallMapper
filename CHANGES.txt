@@ -16,4 +16,6 @@ v0.3.3, 2024-01-04 -- Added option to compute the coloring directly when creatin
 
 v0.3.4, 2024-04-04 -- Updated plotting to work with Bokeh 3.4.0, added color_edges function to bokeh plots 
 
+v0.3.4.1, 2024-07-13 -- Fixed bug when custom ordering is a numpy array instead of a list 
+
 
