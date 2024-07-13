@@ -112,17 +112,6 @@ def _find_landmarks_greedy(X, eps, orbits=None, metric=None, order=None, verbose
     landmarks = {}  # dict of points {idx_v: idx_p, ... }
     centers_counter = 0
 
-    # check wheter order is a list of lenght = len(points)
-    # otherwise use the defaut ordering
-    if order:
-        if len(np.unique(order)) != n_points:
-            warnings.warn(
-                "Warning........... order is not compatible with points, using default ordering"
-            )
-            order = range(n_points)
-    else:
-        order = range(n_points)
-
     if verbose:
         print("Finding vertices...")
 
@@ -289,6 +278,29 @@ class BallMapper:
         self.eps = eps
 
         X = np.asanyarray(X, dtype=float)
+
+        if metric == "precomputed":
+            n_points = X.shape[0]
+        else:
+            n_points = len(X)
+
+        ## convert order to a list
+        if isinstance(order, np.ndarray):
+            order = order.tolist()
+
+        if not isinstance(order, list):
+            warnings.warn(
+                "Warning........... order is not a list or numpy array, using default ordering"
+            )
+            order = range(n_points)
+
+        # check wheter order is a list of lenght = len(points)
+        # otherwise use the defaut ordering
+        if len(np.unique(order)) != n_points:
+            warnings.warn(
+                "Warning........... order is not compatible with points, using default ordering"
+            )
+            order = range(n_points)
 
         # find ladmarks
         landmarks, self.points_covered_by_landmarks = _find_landmarks(
