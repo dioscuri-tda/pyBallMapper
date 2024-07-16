@@ -285,10 +285,13 @@ class BallMapper:
             n_points = len(X)
 
         ## convert order to a list
-        if isinstance(order, np.ndarray):
+        if order == None:
+            order = range(n_points)
+
+        elif isinstance(order, np.ndarray):
             order = order.tolist()
 
-        if not isinstance(order, list):
+        elif not isinstance(order, list):
             warnings.warn(
                 "Warning........... order is not a list or numpy array, using default ordering"
             )
