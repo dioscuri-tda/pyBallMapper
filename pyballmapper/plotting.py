@@ -2,10 +2,9 @@ import numpy as np
 import pandas as pd
 import networkx as nx
 
-import csv
-from tqdm.notebook import tqdm
-
 from matplotlib.colors import to_hex, to_rgb
+
+import networkx as nx
 
 from bokeh.plotting import figure, show
 
@@ -316,3 +315,386 @@ def kmapper_visualize(bm, coloring_df, path_html="output.html", title=None, **kw
         title=title,
         **kwargs
     )
+
+
+## stole from https://github.com/IBM/matilda/blob/main/matilda/mapper.py
+def generate_partitions(node_contents, original_element_values):
+    """
+    Given collections X_i of sets Y_ij and a function U Y_ij -> Z, computes for each i the
+    count of elements in X_i that map to a given value in Z.
+
+
+    node_contents:
+        dict of lists such that `node_contents[node]` is a list of all elements contained in `node`.
+    original_element_values:
+        dict of values associated to each of the original set of elements. Not necessarily numeric.
+    """
+    import collections
+
+    partitions = {}
+    for k, v in node_contents.items():
+        partitions[k] = dict(
+            collections.Counter([original_element_values[x] for x in v])
+        )
+    return partitions
+
+
+def pie_graph_plot(
+    partitions,
+    g=None,
+    nodes=None,
+    edges=None,
+    graph_layout=None,
+    radius=0.01,
+    node_labels=None,
+    node_scaling=False,
+    palette=None,
+    background_fill_color="white",
+    title=None,
+    match_aspect=True,
+    edge_width=1,
+    edge_color="black",
+    plot_height=600,
+    plot_width=600,
+    sizing_mode="fixed",
+    show_node_labels=False,
+    outline_line_width=1,
+    outline_line_color="black",
+):
+    """
+    Produces a bokeh plot of a graph where each node is represented by a pie chart.
+
+    Parameters
+    ----------
+
+    g:
+        networkx graph
+
+    partitions:
+        dict of dicts such that partitions[node][class] == portion of class at node.
+
+    graph_layout:
+        dict of size 2 arrays such that graph_layout[node] == position of node in plane.
+
+    nodes:
+        list of nodes. If used, parameter `g` is ignored.
+
+    edges:
+        list of edges. Used in conjunction with `nodes`. If used, parameter `g` is ignored.
+
+    radius:
+        Radius of nodes. Upper bound on the radii of nodes if `node_scaling` is set to True.
+
+    node_labels:
+        list of text labels for nodes. If provided, must be in same order as iteration
+        over nodes in graph.
+
+    node_scaling:
+        If set to True, nodes are scaled from
+            `((smallest partition size)/(largest partition size))*radius` to `radius`, with
+        a minimum size of nodes of radius/10 for enhanced viewability.
+
+    palette:
+        dict with keys nodes and values bokeh colors, or list with colors with same size as
+        number of classes present in `partitions`.
+
+    title:
+        Plot's title.
+
+    edge_width:
+        Graph's edge thickness.
+
+    edge_color:
+        Graph's edge color. Used only if `sizing_mode` is "fixed".
+
+    show_node_labels:
+        If set to `True`, adds node labels to the plot.
+
+    match_aspect:
+        Preserves aspect ratio when changing size. Passed as-is to bokeh's figure initializer.
+
+    plot_height:
+        Plot's height in pixels. Used only if `sizing_mode` is "fixed". Passed as-is to bokeh's figure initializer.
+
+    plot_width:
+        Plot's width in pixels. Passed as-is to bokeh's figure initializer.
+
+    sizing_mode:
+        One of "fixed", "stretch_both", "stretch_width", "stretch_height", "scale_width", "scale_height".
+        Passed as-is to bokeh's figure initializer.
+
+    outline_line_width:
+        Thickness of the frame of the plot. Passed as-is to bokeh's figure initializer.
+
+    outline_line_color:
+        Color of the frame of the plot. Passed as-is to bokeh's figure initializer.
+
+    background_fill_color:
+        bokeh color to use for plot background. Passed as-is to bokeh's figure initializer.
+
+
+    """
+    import networkx, numpy, pathlib, os, warnings
+    import bokeh.plotting
+    from bokeh.models import HoverTool, CustomAction
+    from bokeh.models import ColumnDataSource, CustomJS, LabelSet
+
+    if g is None and nodes is None and edges is None:
+        raise ValueError("At least one of g, nodes, or edges must be provided.")
+    if nodes is not None or edges is not None:
+        g = networkx.Graph()
+        if nodes is not None:
+            g.add_nodes_from(nodes)
+        if edges is not None:
+            g.add_edges_from(edges)
+    nodes_list = list(g.nodes())
+    if node_labels is None:
+        node_labels = list(map(str, g.nodes()))
+    if not all("pos" in v.keys() for v in g.nodes.values()):
+        if graph_layout is None:
+            raise ValueError(
+                "Graph needs to have node position information stored in `pos` attribute "
+                " (you can specify position information with graph_layout)."
+            )
+        else:
+            for x in nodes_list:
+                g.nodes[x]["pos"] = graph_layout[x]
+    path = os.path.abspath(__file__)
+    dir_path = os.path.dirname(path)
+    p, node_x, node_y = init_bokeh_figure(
+        g,
+        background_fill_color,
+        title,
+        match_aspect,
+        edge_width,
+        edge_color,
+        plot_height,
+        plot_width,
+        sizing_mode,
+        outline_line_width,
+        outline_line_color,
+    )
+    nodes_enum = {n: i for i, n in enumerate(nodes_list)}
+    node_sizes = numpy.array(
+        [sum([vv for kk, vv in partitions[n].items()]) for n in nodes_list]
+    )
+
+    if node_scaling:
+        node_sizes_min = numpy.amin(node_sizes)
+        node_sizes_max = numpy.amax(node_sizes)
+        radii = numpy.interp(
+            node_sizes,
+            (node_sizes_min, node_sizes_max),
+            (max(node_sizes_min * radius / node_sizes_max, radius / 10), radius),
+        )
+    else:
+        radii = [radius] * len(node_sizes)
+    all_node_sources = []
+    factors = sorted(list(set.union(*[set(v.keys()) for v in partitions.values()])))
+    factors_enum = {f: i for i, f in enumerate(factors)}
+    if palette is None:
+        palette = bokeh.palettes.d3["Category10"][max(3, len(factors))]
+    factor_sizes = numpy.zeros((len(factors), len(nodes_list)))
+    for n in nodes_list:
+        for kk, vv in partitions[n].items():
+            factor_sizes[factors_enum[kk], nodes_enum[n]] = vv
+    end_angles = 2 * numpy.pi * numpy.cumsum(factor_sizes, axis=0) / node_sizes
+    start_angles = numpy.roll(end_angles, 1, axis=0)
+    start_angles[0, :] = 0
+    # NOW PLOT ALL NODES AS MINI PIE CHARTS
+    legend_items = []
+    for l in factors:
+        sourced = {}
+        sourced["x"] = node_x
+        sourced["y"] = node_y
+        sourced["radius"] = radii
+        # DEALS WITH CASE OF ONE CLASS PER NODE AND BOKEH'S BEHAVIOR
+        for j in range(start_angles[factors_enum[l]].shape[0]):
+            if (
+                start_angles[factors_enum[l], j] == 0
+                and end_angles[factors_enum[l], j] >= 2 * numpy.pi - 1e-3
+            ):
+                end_angles[factors_enum[l], j] = 2 * numpy.pi - 1e-3
+        sourced["start_angle"] = start_angles[factors_enum[l]]
+        sourced["end_angle"] = end_angles[factors_enum[l]]
+        sourced["factor_size"] = factor_sizes[factors_enum[l]]
+        sourced["factor_label"] = [str(l) for _ in node_x]
+        sourced["node_size"] = node_sizes
+        sourced["node_label"] = node_labels
+        if isinstance(palette, dict):
+            sourced["color"] = [palette[l]] * len(node_x)
+        else:
+            sourced["color"] = [palette[factors_enum[l]]] * len(node_x)
+        source = ColumnDataSource(sourced)
+        all_node_sources.append(source)
+        legend_items += [
+            (
+                l,
+                p.wedge(
+                    x="x",
+                    y="y",
+                    start_angle="start_angle",
+                    end_angle="end_angle",
+                    source=source,
+                    radius="radius",
+                    fill_color="color",
+                    alpha=0.9,
+                    line_width=0,
+                    legend_label=str(l),
+                ),
+            )
+        ]
+        p.arc(
+            x="x",
+            y="y",
+            start_angle="start_angle",
+            end_angle="end_angle",
+            source=source,
+            radius="radius",
+            line_color="color",
+            alpha=1,
+        )
+        labels = LabelSet(
+            x="x",
+            y="y",
+            text="node_label",
+            x_offset=5,
+            y_offset=5,
+            source=source,
+            # render_mode="canvas",
+        )
+    tooltips = (
+        "<div>Class <b>@factor_label</b> in node: <b>@factor_size</b> <br>"
+        "Total in node: <b>@node_size</b> <br>"
+        "Node Label: <b>@node_label</b>"
+    )
+    hover_tool = HoverTool(tooltips=tooltips, renderers=[x for _, x in legend_items])
+    p.add_tools(hover_tool)
+    if show_node_labels:
+        p.add_layout(labels)
+
+    params_node_size_increase_tool = dict(
+        # icon=pathlib.Path(os.path.join(dir_path, "node_size_inc_tool_icon.png")),
+        description="Increase node size",
+        callback=CustomJS(
+            args=dict(sources=all_node_sources), code=node_increase_size_js_code
+        ),
+    )
+    try:
+        node_size_increase_tool = CustomAction(**params_node_size_increase_tool)
+    except ValueError as e:
+        warnings.warn(
+            "\nWorkaround for bokeh<2.4 exception:\n" + str(e), RuntimeWarning
+        )
+        # params_node_size_increase_tool["icon"] = os.path.join(
+        #     dir_path, "node_size_inc_tool_icon.png"
+        # )
+        node_size_increase_tool = CustomAction(**params_node_size_increase_tool)
+    params_node_size_decrease_tool = dict(
+        # icon=pathlib.Path(os.path.join(dir_path, "node_size_dec_tool_icon.png")),
+        description="Decrease node size",
+        callback=CustomJS(
+            args=dict(sources=all_node_sources), code=node_decrease_size_js_code
+        ),
+    )
+    try:
+        node_size_decrease_tool = CustomAction(**params_node_size_decrease_tool)
+    except ValueError as e:
+        warnings.warn(
+            "\nWorkaround for bokeh<2.4 exception:\n" + str(e), RuntimeWarning
+        )
+        # params_node_size_decrease_tool["icon"] = os.path.join(
+        #     dir_path, "node_size_dec_tool_icon.png"
+        # )
+        node_size_decrease_tool = CustomAction(**params_node_size_decrease_tool)
+    p.add_tools(node_size_decrease_tool)
+    p.add_tools(node_size_increase_tool)
+    return p
+
+
+def init_bokeh_figure(
+    g,
+    background_fill_color,
+    title,
+    match_aspect,
+    edge_width,
+    edge_color,
+    plot_height,
+    plot_width,
+    sizing_mode,
+    outline_line_width,
+    outline_line_color,
+):
+    from bokeh.models import BoxZoomTool, WheelZoomTool
+    import bokeh.plotting, networkx
+
+    box_zoom_tool = BoxZoomTool(match_aspect=False)
+    wheel_zoom_tool = WheelZoomTool(speed=0.002, zoom_on_axis=False)
+    p = bokeh.plotting.figure(
+        title=title,
+        toolbar_location="right",
+        tools=[box_zoom_tool, wheel_zoom_tool, "pan", "reset", "save"],
+        active_scroll=wheel_zoom_tool,
+        match_aspect=match_aspect,
+        height=plot_height,
+        width=plot_width,
+        sizing_mode=sizing_mode,
+        outline_line_width=outline_line_width,
+        outline_line_color=outline_line_color,
+        background_fill_color=background_fill_color,
+    )
+    p.xaxis.visible = False
+    p.yaxis.visible = False
+    p.xgrid.visible = False
+    p.ygrid.visible = False
+    pos = networkx.get_node_attributes(g, "pos")
+    edge_x = []
+    edge_y = []
+    for edge in g.edges():
+        x0, y0 = pos[edge[0]]
+        x1, y1 = pos[edge[1]]
+        edge_x.append(x0)
+        edge_x.append(x1)
+        edge_y.append(y0)
+        edge_y.append(y1)
+        # HACKY SOLUTION TO GET EDGES INSTEAD OF ONE VERY LONG LINE
+        edge_x.append(float("nan"))
+        edge_y.append(float("nan"))
+
+    node_x = []
+    node_y = []
+    for node in g.nodes():
+        x, y = pos[node]
+        node_x.append(x)
+        node_y.append(y)
+    p.line(edge_x, edge_y, line_width=edge_width, color=edge_color)
+    return p, node_x, node_y
+
+
+node_increase_size_js_code = """
+                                var j = 0;
+                                for(j=0;j<sources.length;j++)
+                                {
+                                    var radius = sources[j].data.radius;
+                                    var i = 0;
+                                    for(i=0; i<radius.length; i++)
+                                    {
+                                        radius[i] = radius[i] * 1.25
+                                    }
+                                    sources[j].change.emit()  
+                                }
+                            """
+
+node_decrease_size_js_code = """
+                                var j = 0;
+                                for(j=0;j<sources.length;j++)
+                                {
+                                    var radius = sources[j].data.radius;
+                                    var i = 0;
+                                    for(i=0; i<radius.length; i++)
+                                    {
+                                        radius[i] = radius[i] / 1.25
+                                    }
+                                    sources[j].change.emit()  
+                                }
+                            """

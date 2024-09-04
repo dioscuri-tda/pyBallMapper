@@ -69,10 +69,7 @@ def _find_landmarks_greedy(X, eps, orbits=None, metric=None, order=None, verbose
     
     """
 
-    if metric == "precomputed":
-        n_points = X.shape[0]
-    else:
-        n_points = len(X)
+    n_points = X.shape[0]
 
     # set the distance function
     # f is used to access the points
@@ -277,12 +274,15 @@ class BallMapper:
 
         self.eps = eps
 
-        X = np.asanyarray(X, dtype=float)
+        if not isinstance(X, np.ndarray):
+            try:
+                X = np.asanyarray(X, dtype=float)
+            except:
+                warnings.warn(
+                    "the input is {} - cannot convert it to numpy array".format(type(X))
+                )
 
-        if metric == "precomputed":
-            n_points = X.shape[0]
-        else:
-            n_points = len(X)
+        n_points = X.shape[0]
 
         ## convert order to a list
         if order == None:
