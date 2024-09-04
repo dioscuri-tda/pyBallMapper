@@ -69,10 +69,7 @@ def _find_landmarks_greedy(X, eps, orbits=None, metric=None, order=None, verbose
     
     """
 
-    if metric == "precomputed":
-        n_points = X.shape[0]
-    else:
-        n_points = len(X)
+    n_points = X.shape[0]
 
     # set the distance function
     # f is used to access the points
@@ -111,17 +108,6 @@ def _find_landmarks_greedy(X, eps, orbits=None, metric=None, order=None, verbose
     # find landmark points
     landmarks = {}  # dict of points {idx_v: idx_p, ... }
     centers_counter = 0
-
-    # check wheter order is a list of lenght = len(points)
-    # otherwise use the defaut ordering
-    if order:
-        if len(np.unique(order)) != n_points:
-            warnings.warn(
-                "Warning........... order is not compatible with points, using default ordering"
-            )
-            order = range(n_points)
-    else:
-        order = range(n_points)
 
     if verbose:
         print("Finding vertices...")
@@ -509,7 +495,36 @@ class BallMapper:
 
         self.eps = eps
 
-        X = np.asanyarray(X, dtype=float)
+        if not isinstance(X, np.ndarray):
+            try:
+                X = np.asanyarray(X, dtype=float)
+            except:
+                warnings.warn(
+                    "the input is {} - cannot convert it to numpy array".format(type(X))
+                )
+
+        n_points = X.shape[0]
+
+        ## convert order to a list
+        if order == None:
+            order = range(n_points)
+
+        elif isinstance(order, np.ndarray):
+            order = order.tolist()
+
+        elif not isinstance(order, list):
+            warnings.warn(
+                "Warning........... order is not a list or numpy array, using default ordering"
+            )
+            order = range(n_points)
+
+        # check wheter order is a list of lenght = len(points)
+        # otherwise use the defaut ordering
+        if len(np.unique(order)) != n_points:
+            warnings.warn(
+                "Warning........... order is not compatible with points, using default ordering"
+            )
+            order = range(n_points)
 
         # find ladmarks
         landmarks, self.points_covered_by_landmarks, self.eps_dict = _find_landmarks(
