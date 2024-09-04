@@ -9,7 +9,7 @@ long_description = (this_directory / "README.md").read_text()
 
 setup(
     name="pyBallMapper",
-    version="0.3.4.1",
+    version="0.3.5",
     author="Davide Gurnari",
     author_email="davide.gurnari@gmail.com",
     packages=["pyballmapper", "pyballmapper.tests"],

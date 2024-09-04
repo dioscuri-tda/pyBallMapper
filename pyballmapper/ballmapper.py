@@ -148,10 +148,216 @@ def _find_landmarks_greedy(X, eps, orbits=None, metric=None, order=None, verbose
             if distance(f(idx_p), f(landmarks[idx_v])) <= eps:
                 points_covered_by_landmarks[idx_v].append(idx_p)
 
-    return landmarks, points_covered_by_landmarks
+    return landmarks, points_covered_by_landmarks, None
 
 
-def _find_landmarks(X, eps=None, orbits=None, metric=None, order=None, verbose=False):
+def _find_landmarks_adaptive(
+    X, eps, max_size, eta=0.7, orbits=None, metric=None, order=None, verbose=False
+):
+    """Finds the landmaks points via a greedy search procedure.
+    
+    Selects the first non-covered points in the cosidered order, adds it to the \
+    list of landmarks and labels as covered all point inside its eps-ball. \
+    Repeats the procedure till there are no more uncovered points.
+
+    Parameters
+    ----------
+    X : {array-like, sparse matrix} of shape (n_samples, n_features) \
+            or (n_samples, n_samples)
+        Data vectors, where `n_samples` is the number of samples
+        and `n_features` is the number of features.
+        For metric='precomputed', the expected shape of X is
+        (n_samples, n_samples).
+
+    eps : float
+        The radius of the balls.
+
+    orbits : list of lenght n_samples, default=None
+        For each data points, contains a list of points in its orbit. 
+        Use it to create an Equivariant BallMapper.
+
+    metric : str, or callable, default='euclidean'
+        The metric to use when calculating distance between instances in a
+        feature array.
+        If metric is 'precomputed', X is assumed to be a distance matrix and
+        must be square.
+
+    order: array-like of shape (n_samples, ), default=None
+        The order in which to consider the data points in the greedy \
+        search for landmarks. Different ordering might lead to different \
+        BallMapper graphs.
+        By defaults uses the order of X.
+
+    verbose: bool or string, default=False
+        Enable verbose output. Set it to 'tqdm' to show a tqdm progressbar.
+
+    Returns
+    ----------
+    landmarks: list
+        ids of the landmark points
+
+    points_covered_by_landmarks: dict
+        keys: landmarks ids
+        values: list of ids of the points covered by the corresponding ball
+
+    
+    """
+
+    if metric == "precomputed":
+        n_points = X.shape[0]
+    else:
+        n_points = len(X)
+
+    # set the distance function
+    # f is used to access the points
+    f = lambda i: X[i]
+    if metric == "euclidean":
+        distance = _euclid_distance
+
+    elif metric == "precomputed":
+        distance = lambda x, y: X[x, y]
+        f = lambda i: i
+        if verbose:
+            print("using precomputed distance matrix")
+
+    else:
+        distance = metric
+        if verbose:
+            print("using custom distance {}".format(distance))
+
+    # set the orbits
+    if orbits is None:
+        points_have_orbits = False
+    elif (type(orbits) is np.ndarray) or (type(orbits) is list):
+        if len(orbits) != n_points:
+            points_have_orbits = False
+            warnings.warn(
+                "Warning........... orbits is not compatible with points, ignoring it"
+            )
+        else:
+            points_have_orbits = True
+    else:
+        warnings.warn(
+            "Warning........... orbits should be a list or a numpy array, ignoring it"
+        )
+        points_have_orbits = False
+
+    # find landmark points
+    landmarks = {}  # dict of points {idx_v: idx_p, ... }
+    centers_counter = -1
+
+    # check wheter order is a list of lenght = len(points)
+    # otherwise use the defaut ordering
+    if order:
+        if len(np.unique(order)) != n_points:
+            warnings.warn(
+                "Warning........... order is not compatible with points, using default ordering"
+            )
+            order = range(n_points)
+    else:
+        order = range(n_points)
+
+    if verbose:
+        print("Finding vertices...")
+
+    pbar = tqdm(order, disable=not (verbose == "tqdm"))
+
+    # since the radius of every ball might be different, we need to store them
+    eps_dict = dict()
+    points_covered_by_landmarks = dict()
+
+    for idx_p in pbar:
+        # current point
+        p = f(idx_p)
+
+        pbar.set_description("{} vertices found".format(centers_counter))
+
+        is_covered = False
+
+        for idx_v in landmarks:
+            if distance(p, f(landmarks[idx_v])) <= eps_dict[idx_v]:
+                is_covered = True
+                break
+
+        if not is_covered:
+            # we use this as a new landmark
+            centers_counter += 1
+            landmarks[centers_counter] = idx_p
+
+            # compute points_covered_by this new landmarks
+            points_covered_by_landmarks[centers_counter] = []
+            eps_dict[centers_counter] = eps
+            for idx_p2 in order:
+                if (
+                    distance(f(idx_p2), f(landmarks[centers_counter]))
+                    <= eps_dict[centers_counter]
+                ):
+                    points_covered_by_landmarks[centers_counter].append(idx_p2)
+
+            while len(points_covered_by_landmarks[centers_counter]) > max_size:
+                # decrease the radius and recompute
+                eps_dict[centers_counter] *= eta
+                if verbose:
+                    print(
+                        "ball {} - point {}  has size {}. decreasing eps to {}".format(
+                            centers_counter,
+                            idx_p,
+                            len(points_covered_by_landmarks[centers_counter]),
+                            eps_dict[centers_counter],
+                        )
+                    )
+
+                points_covered_by_landmarks[centers_counter] = []
+                for idx_p2 in order:
+                    if (
+                        distance(f(idx_p2), f(landmarks[centers_counter]))
+                        <= eps_dict[centers_counter]
+                    ):
+                        points_covered_by_landmarks[centers_counter].append(idx_p2)
+
+            # add points in the orbit
+            if points_have_orbits:
+
+                eps_o = eps_dict[centers_counter]
+
+                for idx_p_o in orbits[idx_p]:
+                    if idx_p_o != idx_p:
+                        centers_counter += 1
+                        landmarks[centers_counter] = idx_p_o
+
+                        # if verbose:
+                        #     print(
+                        #         "adding orbit landmark {} with eps {}".format(
+                        #             centers_counter, eps_o
+                        #         )
+                        #     )
+
+                        # compute points_covered_by this new landmarks
+                        # using the same radius as the original landmark
+                        points_covered_by_landmarks[centers_counter] = []
+                        eps_dict[centers_counter] = eps_o
+                        for idx_p2 in order:
+                            if (
+                                distance(f(idx_p2), f(landmarks[centers_counter]))
+                                <= eps_dict[centers_counter]
+                            ):
+                                points_covered_by_landmarks[centers_counter].append(
+                                    idx_p2
+                                )
+
+    return landmarks, points_covered_by_landmarks, eps_dict
+
+
+def _find_landmarks(
+    X,
+    eps=None,
+    orbits=None,
+    metric=None,
+    order=None,
+    method=None,
+    verbose=False,
+    **kwargs
+):
     """Finds the landmaks points. At the moment the only option is a greedy search
 
     Parameters
@@ -196,11 +402,24 @@ def _find_landmarks(X, eps=None, orbits=None, metric=None, order=None, verbose=F
 
     
     """
-    landmarks, points_covered_by_landmarks = _find_landmarks_greedy(
-        X, eps, orbits, metric, order, verbose
-    )
 
-    return landmarks, points_covered_by_landmarks
+    if method == "adaptive":
+        landmarks, points_covered_by_landmarks, eps_dict = _find_landmarks_adaptive(
+            X=X,
+            eps=eps,
+            max_size=kwargs["max_size"],
+            eta=kwargs["eta"],
+            orbits=orbits,
+            metric=metric,
+            order=order,
+            verbose=verbose,
+        )
+    else:
+        landmarks, points_covered_by_landmarks, eps_dict = _find_landmarks_greedy(
+            X, eps, orbits, metric, order, verbose
+        )
+
+    return landmarks, points_covered_by_landmarks, eps_dict
 
 
 class BallMapper:
@@ -212,7 +431,9 @@ class BallMapper:
         orbits=None,
         metric="euclidean",
         order=None,
+        method=None,
         verbose=False,
+        **kwargs
     ):
         """Create a BallMapper graph from vector array or distance matrix.
 
@@ -306,8 +527,8 @@ class BallMapper:
             order = range(n_points)
 
         # find ladmarks
-        landmarks, self.points_covered_by_landmarks = _find_landmarks(
-            X, eps, orbits, metric, order, verbose
+        landmarks, self.points_covered_by_landmarks, self.eps_dict = _find_landmarks(
+            X, eps, orbits, metric, order, method, verbose, **kwargs
         )
 
         # find edges
