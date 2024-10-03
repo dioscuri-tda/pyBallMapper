@@ -347,7 +347,7 @@ def pie_graph_plot(
     graph_layout=None,
     radius=0.01,
     node_labels=None,
-    node_scaling=False,
+    node_scaling="old",
     palette=None,
     background_fill_color="white",
     title=None,
@@ -479,7 +479,7 @@ def pie_graph_plot(
         [sum([vv for kk, vv in partitions[n].items()]) for n in nodes_list]
     )
 
-    if node_scaling:
+    if node_scaling == "old":
         node_sizes_min = numpy.amin(node_sizes)
         node_sizes_max = numpy.amax(node_sizes)
         radii = numpy.interp(
@@ -487,6 +487,12 @@ def pie_graph_plot(
             (node_sizes_min, node_sizes_max),
             (max(node_sizes_min * radius / node_sizes_max, radius / 10), radius),
         )
+    elif node_scaling == "new":
+        MAX_NODE_SIZE = numpy.amax(node_sizes)
+        MAX_SIZE = 20
+        MIN_SIZE = 7
+        # rescale the size for display
+        radii = [radius * (MAX_SIZE * s / MAX_NODE_SIZE + MIN_SIZE) for s in node_sizes]
     else:
         radii = [radius] * len(node_sizes)
     all_node_sources = []

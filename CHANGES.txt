@@ -20,4 +20,6 @@ v0.3.4.1, 2024-07-13 -- Fixed bug when custom ordering is a numpy array instead 
 
 v0.3.5, 2024-09-04 -- Added adaptive landmark selection 
 
+v0.3.6, 2024-09-12 -- Added piecharts plots in Bokeh
+
 
