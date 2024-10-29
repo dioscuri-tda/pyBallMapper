@@ -13,13 +13,29 @@ from numba import njit
 
 import copy
 
+import concurrent.futures
+
 
 @njit
 def _euclid_distance(x, y):
     return np.linalg.norm(x - y)
 
 
-def _find_landmarks_greedy(X, eps, orbits=None, metric=None, order=None, verbose=False):
+def find_covered_points(idx_v, landmarks, order, eps, distance, f, X):
+    covered_points = []
+    for idx_p in order:
+        if distance(f(idx_p, X), f(landmarks[idx_v], X)) <= eps:
+            covered_points.append(idx_p)
+    return idx_v, covered_points
+
+
+def get_point(i, X):
+    return X[i]
+
+
+def _find_landmarks_greedy(
+    X, eps, orbits=None, metric=None, order=None, verbose=False, parallel=False
+):
     """Finds the landmaks points via a greedy search procedure.
     
     Selects the first non-covered points in the cosidered order, adds it to the \
@@ -73,13 +89,13 @@ def _find_landmarks_greedy(X, eps, orbits=None, metric=None, order=None, verbose
 
     # set the distance function
     # f is used to access the points
-    f = lambda i: X[i]
+    f = get_point
     if metric == "euclidean":
         distance = _euclid_distance
 
     elif metric == "precomputed":
         distance = lambda x, y: X[x, y]
-        f = lambda i: i
+        f = lambda i, X: i
         if verbose:
             print("using precomputed distance matrix")
 
@@ -116,14 +132,14 @@ def _find_landmarks_greedy(X, eps, orbits=None, metric=None, order=None, verbose
 
     for idx_p in pbar:
         # current point
-        p = f(idx_p)
+        p = f(idx_p, X)
 
         pbar.set_description("{} vertices found".format(centers_counter))
 
         is_covered = False
 
         for idx_v in landmarks:
-            if distance(p, f(landmarks[idx_v])) <= eps:
+            if distance(p, f(landmarks[idx_v], X)) <= eps:
                 is_covered = True
                 break
 
@@ -141,12 +157,35 @@ def _find_landmarks_greedy(X, eps, orbits=None, metric=None, order=None, verbose
     if verbose:
         print("{} vertices found.".format(centers_counter))
         print("Computing points_covered_by_landmarks...")
-    points_covered_by_landmarks = dict()
-    for idx_v in tqdm(landmarks, disable=not (verbose == "tqdm")):
-        points_covered_by_landmarks[idx_v] = []
-        for idx_p in order:
-            if distance(f(idx_p), f(landmarks[idx_v])) <= eps:
-                points_covered_by_landmarks[idx_v].append(idx_p)
+
+    if parallel:
+        print("using parallel")
+        points_covered_by_landmarks = dict()
+
+        with concurrent.futures.ProcessPoolExecutor() as executor:
+            # Prepare the arguments for the executor
+            futures = {
+                executor.submit(
+                    find_covered_points, idx_v, landmarks, order, eps, distance, f, X
+                ): idx_v
+                for idx_v in landmarks
+            }
+
+            for future in tqdm(
+                concurrent.futures.as_completed(futures),
+                total=len(futures),
+                disable=not (verbose == "tqdm"),
+            ):
+                idx_v, covered_points = future.result()
+                points_covered_by_landmarks[idx_v] = covered_points
+
+    else:
+        points_covered_by_landmarks = dict()
+        for idx_v in tqdm(landmarks, disable=not (verbose == "tqdm")):
+            points_covered_by_landmarks[idx_v] = []
+            for idx_p in order:
+                if distance(f(idx_p, X), f(landmarks[idx_v], X)) <= eps:
+                    points_covered_by_landmarks[idx_v].append(idx_p)
 
     return landmarks, points_covered_by_landmarks, None
 
@@ -356,6 +395,7 @@ def _find_landmarks(
     order=None,
     method=None,
     verbose=False,
+    parallel=False,
     **kwargs
 ):
     """Finds the landmaks points. At the moment the only option is a greedy search
@@ -416,7 +456,7 @@ def _find_landmarks(
         )
     else:
         landmarks, points_covered_by_landmarks, eps_dict = _find_landmarks_greedy(
-            X, eps, orbits, metric, order, verbose
+            X, eps, orbits, metric, order, verbose, parallel
         )
 
     return landmarks, points_covered_by_landmarks, eps_dict
@@ -433,6 +473,7 @@ class BallMapper:
         order=None,
         method=None,
         verbose=False,
+        parallel=False,
         **kwargs
     ):
         """Create a BallMapper graph from vector array or distance matrix.
@@ -527,8 +568,10 @@ class BallMapper:
             order = range(n_points)
 
         # find ladmarks
-        landmarks, self.points_covered_by_landmarks, self.eps_dict = _find_landmarks(
-            X, eps, orbits, metric, order, method, verbose, **kwargs
+        self.landmarks, self.points_covered_by_landmarks, self.eps_dict = (
+            _find_landmarks(
+                X, eps, orbits, metric, order, method, verbose, parallel, **kwargs
+            )
         )
 
         # find edges
@@ -537,9 +580,9 @@ class BallMapper:
             print("Finding edges...")
         edges = []  # list of edges [[idx_v, idx_u], ...]
         for i, idx_v in tqdm(
-            enumerate(list(landmarks.keys())[:-1]), disable=not (verbose == "tqdm")
+            enumerate(list(self.landmarks.keys())[:-1]), disable=not (verbose == "tqdm")
         ):
-            for idx_u in list(landmarks.keys())[i + 1 :]:
+            for idx_u in list(self.landmarks.keys())[i + 1 :]:
                 if (
                     len(
                         set(self.points_covered_by_landmarks[idx_v]).intersection(
@@ -554,11 +597,11 @@ class BallMapper:
         if verbose:
             print("Creating Ball Mapper graph...")
         self.Graph = nx.Graph()
-        self.Graph.add_nodes_from(landmarks.keys())
+        self.Graph.add_nodes_from(self.landmarks.keys())
         self.Graph.add_edges_from(edges)
 
         for node in self.Graph.nodes:
-            self.Graph.nodes[node]["landmark"] = landmarks[node]
+            self.Graph.nodes[node]["landmark"] = self.landmarks[node]
             self.Graph.nodes[node]["points covered"] = np.array(
                 self.points_covered_by_landmarks[node]
             )
