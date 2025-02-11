@@ -580,7 +580,7 @@ def pie_graph_plot(
         p.add_layout(labels)
 
     params_node_size_increase_tool = dict(
-        # icon=pathlib.Path(os.path.join(dir_path, "node_size_inc_tool_icon.png")),
+        icon=pathlib.Path(os.path.join(dir_path, "img/plus-icon.png")),
         description="Increase node size",
         callback=CustomJS(
             args=dict(sources=all_node_sources), code=node_increase_size_js_code
@@ -592,12 +592,12 @@ def pie_graph_plot(
         warnings.warn(
             "\nWorkaround for bokeh<2.4 exception:\n" + str(e), RuntimeWarning
         )
-        # params_node_size_increase_tool["icon"] = os.path.join(
-        #     dir_path, "node_size_inc_tool_icon.png"
-        # )
+        params_node_size_increase_tool["icon"] = os.path.join(
+            dir_path, "img/plus-icon.png"
+        )
         node_size_increase_tool = CustomAction(**params_node_size_increase_tool)
     params_node_size_decrease_tool = dict(
-        # icon=pathlib.Path(os.path.join(dir_path, "node_size_dec_tool_icon.png")),
+        icon=pathlib.Path(os.path.join(dir_path, "img/minus-icon.png")),
         description="Decrease node size",
         callback=CustomJS(
             args=dict(sources=all_node_sources), code=node_decrease_size_js_code
@@ -609,9 +609,9 @@ def pie_graph_plot(
         warnings.warn(
             "\nWorkaround for bokeh<2.4 exception:\n" + str(e), RuntimeWarning
         )
-        # params_node_size_decrease_tool["icon"] = os.path.join(
-        #     dir_path, "node_size_dec_tool_icon.png"
-        # )
+        params_node_size_decrease_tool["icon"] = os.path.join(
+            dir_path, "img/minus-icon.png"
+        )
         node_size_decrease_tool = CustomAction(**params_node_size_decrease_tool)
     p.add_tools(node_size_decrease_tool)
     p.add_tools(node_size_increase_tool)
