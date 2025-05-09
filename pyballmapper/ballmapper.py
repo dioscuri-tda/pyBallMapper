@@ -140,15 +140,15 @@ def _find_landmarks_greedy(
 
         if not is_covered:
             landmarks[centers_counter] = idx_p
-            centers_counter += 1
             eps_dict[centers_counter] = eps_p
+            centers_counter += 1
             # add points in the orbit
             if points_have_orbits:
                 for idx_p_o in orbits[idx_p]:
                     if idx_p_o != idx_p:
                         landmarks[centers_counter] = idx_p_o
-                        centers_counter += 1
                         eps_dict[centers_counter] = eps[idx_p_o]
+                        centers_counter += 1
 
     # compute points_covered_by_landmarks
     if verbose:
