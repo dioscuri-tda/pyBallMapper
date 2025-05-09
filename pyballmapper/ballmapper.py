@@ -19,7 +19,9 @@ def _euclid_distance(x, y):
     return np.linalg.norm(x - y)
 
 
-def _find_landmarks_greedy(X, eps, orbits=None, metric=None, order=None, verbose=False):
+def _find_landmarks_greedy(
+    X, eps, orbits=None, metric=None, order=None, multiple_eps=False, verbose=False
+):
     """Finds the landmaks points via a greedy search procedure.
     
     Selects the first non-covered points in the cosidered order, adds it to the \
@@ -109,6 +111,9 @@ def _find_landmarks_greedy(X, eps, orbits=None, metric=None, order=None, verbose
     landmarks = {}  # dict of points {idx_v: idx_p, ... }
     centers_counter = 0
 
+    # since the radius of every ball might be different, we need to store them
+    eps_dict = dict()
+
     if verbose:
         print("Finding vertices...")
 
@@ -122,20 +127,28 @@ def _find_landmarks_greedy(X, eps, orbits=None, metric=None, order=None, verbose
 
         is_covered = False
 
+        # get the radius of the point p
+        if multiple_eps:
+            eps_p = eps[idx_p]
+        else:
+            eps_p = eps
+
         for idx_v in landmarks:
-            if distance(p, f(landmarks[idx_v])) <= eps:
+            if distance(p, f(landmarks[idx_v])) <= eps_p:
                 is_covered = True
                 break
 
         if not is_covered:
             landmarks[centers_counter] = idx_p
             centers_counter += 1
+            eps_dict[centers_counter] = eps_p
             # add points in the orbit
             if points_have_orbits:
                 for idx_p_o in orbits[idx_p]:
                     if idx_p_o != idx_p:
                         landmarks[centers_counter] = idx_p_o
                         centers_counter += 1
+                        eps_dict[centers_counter] = eps[idx_p_o]
 
     # compute points_covered_by_landmarks
     if verbose:
@@ -145,10 +158,15 @@ def _find_landmarks_greedy(X, eps, orbits=None, metric=None, order=None, verbose
     for idx_v in tqdm(landmarks, disable=not (verbose == "tqdm")):
         points_covered_by_landmarks[idx_v] = []
         for idx_p in order:
-            if distance(f(idx_p), f(landmarks[idx_v])) <= eps:
+            # get the radius of the point p
+            if multiple_eps:
+                eps_p = eps[idx_p]
+            else:
+                eps_p = eps
+            if distance(f(idx_p), f(landmarks[idx_v])) <= eps_p:
                 points_covered_by_landmarks[idx_v].append(idx_p)
 
-    return landmarks, points_covered_by_landmarks, None
+    return landmarks, points_covered_by_landmarks, eps_dict
 
 
 def _find_landmarks_adaptive(
@@ -355,6 +373,7 @@ def _find_landmarks(
     metric=None,
     order=None,
     method=None,
+    multiple_eps=False,
     verbose=False,
     **kwargs
 ):
@@ -404,6 +423,8 @@ def _find_landmarks(
     """
 
     if method == "adaptive":
+        if multiple_eps:
+            raise ValueError("Adaptive with multiple radii still not implemented! :()")
         landmarks, points_covered_by_landmarks, eps_dict = _find_landmarks_adaptive(
             X=X,
             eps=eps,
@@ -416,7 +437,7 @@ def _find_landmarks(
         )
     else:
         landmarks, points_covered_by_landmarks, eps_dict = _find_landmarks_greedy(
-            X, eps, orbits, metric, order, verbose
+            X, eps, orbits, metric, order, multiple_eps, verbose
         )
 
     return landmarks, points_covered_by_landmarks, eps_dict
@@ -446,8 +467,9 @@ class BallMapper:
             For metric='precomputed', the expected shape of X is
             (n_samples, n_samples).
 
-        eps : float
-            The radius of the balls.
+        eps : float, or iterable
+            The radius of the balls. If a list of lenght n_samples is passed \
+            each point has its own radius.
 
         orbits : list of lenght n_samples, default=None
             For each data points, contains a list of points in its orbit. 
@@ -526,9 +548,28 @@ class BallMapper:
             )
             order = range(n_points)
 
+        # check the radius
+
+        self.multiple_eps = False
+        if isinstance(eps, (float, np.floating)):
+            print("The eps is a single float.")
+        elif isinstance(eps, (int, np.integer)):
+            print("The eps is a single integer.")
+        elif isinstance(eps, (list, np.ndarray)):
+            print("The eps is a list or NumPy array of lenght {}.".format(len(eps)))
+            self.multiple_eps = True
+            if len(eps) != n_points:
+                raise ValueError(
+                    "The list of radii has the wrong lenght {}. Does not match the number of points: {}".format(
+                        len(eps), n_points
+                    )
+                )
+        else:
+            raise ValueError("The variable is neither a scalar nor a list/array.")
+
         # find ladmarks
         landmarks, self.points_covered_by_landmarks, self.eps_dict = _find_landmarks(
-            X, eps, orbits, metric, order, method, verbose, **kwargs
+            X, eps, orbits, metric, order, method, self.multiple_eps, verbose, **kwargs
         )
 
         # find edges

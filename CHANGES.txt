@@ -24,4 +24,6 @@ v0.3.6, 2024-09-12 -- Added piecharts plots in Bokeh
 
 v0.3.7, 2024-09-12 -- Added adaptive radius and piecharts example, added icons
 
+v0.3.8, 2025-05-09 -- Added multiple radii
+
 
