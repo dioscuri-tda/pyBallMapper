@@ -4,6 +4,9 @@ python:
   install:
     - requirements: docs/requirements.txt
 
+sphinx:
+  # Path to your Sphinx configuration file.
+  configuration: docs/source/conf.py
 
 # Set the OS, Python version and other tools you might need
 
