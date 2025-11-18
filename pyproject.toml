@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=61.0.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["pyballmapper"]
+
+[tool.setuptools.dynamic]
+version = {attr = "pyballmapper.__version__"}
+
+[project]
+name = "pyBallMapper"
+readme = "README.md"
+requires-python = ">=3.8"
+
+maintainers = [
+    {name = "Davide Gurnari"},
+]
+
+dependencies = [
+   "numpy",
+    "pandas",
+    "networkx",
+    "matplotlib",
+    "bokeh",
+    "numba",
+    "scikit-learn"
+]
+
+dynamic = ["version"]
