@@ -1,6 +1,5 @@
 import networkx as nx
 import numpy as np
-import pandas as pd
 from scipy.sparse import csr_matrix
 from sklearn.cluster import DBSCAN
 from tqdm.auto import tqdm
@@ -20,7 +19,7 @@ class MapperonBallMapper(BallMapper):
         dbg=False,
     ):
         """Mapper on BallMapper using DBSCAN as clustering algorithm.
-        
+
         It uses scipy csr sparse matrix to speed up computations.
 
         Parameters
@@ -51,7 +50,7 @@ class MapperonBallMapper(BallMapper):
 
         https://scikit-learn.org/stable/modules/generated/sklearn.cluster.DBSCAN.html
 
-        
+
         """
 
         new_graph = nx.Graph()

@@ -17,7 +17,7 @@ def _euclid_distance(x, y):
 
 def _find_landmarks_greedy(X, eps, orbits=None, metric=None, order=None, verbose=False):
     """Finds the landmaks points via a greedy search procedure.
-    
+
     Selects the first non-covered points in the cosidered order, adds it to the \
     list of landmarks and labels as covered all point inside its eps-ball. \
     Repeats the procedure till there are no more uncovered points.
@@ -35,7 +35,7 @@ def _find_landmarks_greedy(X, eps, orbits=None, metric=None, order=None, verbose
         The radius of the balls.
 
     orbits : list of lenght n_samples, default=None
-        For each data points, contains a list of points in its orbit. 
+        For each data points, contains a list of points in its orbit.
         Use it to create an Equivariant BallMapper.
 
     metric : str, or callable, default='euclidean'
@@ -62,7 +62,7 @@ def _find_landmarks_greedy(X, eps, orbits=None, metric=None, order=None, verbose
         keys: landmarks ids
         values: list of ids of the points covered by the corresponding ball
 
-    
+
     """
 
     n_points = X.shape[0]
@@ -151,7 +151,7 @@ def _find_landmarks_adaptive(
     X, eps, max_size, eta=0.7, orbits=None, metric=None, order=None, verbose=False
 ):
     """Finds the landmaks points via a greedy search procedure.
-    
+
     Selects the first non-covered points in the cosidered order, adds it to the \
     list of landmarks and labels as covered all point inside its eps-ball. \
     Repeats the procedure till there are no more uncovered points.
@@ -169,7 +169,7 @@ def _find_landmarks_adaptive(
         The radius of the balls.
 
     orbits : list of lenght n_samples, default=None
-        For each data points, contains a list of points in its orbit. 
+        For each data points, contains a list of points in its orbit.
         Use it to create an Equivariant BallMapper.
 
     metric : str, or callable, default='euclidean'
@@ -196,7 +196,7 @@ def _find_landmarks_adaptive(
         keys: landmarks ids
         values: list of ids of the points covered by the corresponding ball
 
-    
+
     """
 
     if metric == "precomputed":
@@ -369,7 +369,7 @@ def _find_landmarks(
         The radius of the balls.
 
     orbits : list of lenght n_samples, default=None
-        For each data points, contains a list of points in its orbit. 
+        For each data points, contains a list of points in its orbit.
         Use it to create an Equivariant BallMapper.
 
     metric : str, or callable, default='euclidean'
@@ -396,7 +396,7 @@ def _find_landmarks(
         keys: landmarks ids
         values: list of ids of the points covered by the corresponding ball
 
-    
+
     """
 
     if method == "adaptive":
@@ -446,12 +446,12 @@ class BallMapper:
             The radius of the balls.
 
         orbits : list of lenght n_samples, default=None
-            For each data points, contains a list of points in its orbit. 
+            For each data points, contains a list of points in its orbit.
             Use it to create an Equivariant BallMapper.
 
         coloring_df: pandas dataframe of shape (n_samples, n_coloring_function), default=None
-            If defined, uses the `add_coloring` method to compute the average value 
-            of of each column for the points covered by each ball.
+            If defined, uses the `add_coloring` method to compute the average value
+            of each column for the points covered by each ball.
 
         metric : str, or callable, default='euclidean'
             The metric to use when calculating distance between instances in a
@@ -494,15 +494,15 @@ class BallMapper:
         if not isinstance(X, np.ndarray):
             try:
                 X = np.asanyarray(X, dtype=float)
-            except:
+            except (TypeError, ValueError):
                 warnings.warn(
                     "the input is {} - cannot convert it to numpy array".format(type(X))
                 )
 
         n_points = X.shape[0]
 
-        ## convert order to a list
-        if order == None:
+        # convert order to a list
+        if order is None:
             order = range(n_points)
 
         elif isinstance(order, np.ndarray):
@@ -767,7 +767,7 @@ class BallMapper:
             [self.Graph.nodes[node]["size"] for node in self.Graph.nodes]
         )
 
-        if ax == None:
+        if ax is None:
             ax = plt.gca()
 
         MIN_VALUE, MAX_VALUE = self.color_by_variable(

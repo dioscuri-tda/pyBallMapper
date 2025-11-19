@@ -2,22 +2,16 @@ import networkx as nx
 import numpy as np
 import pandas as pd
 from bokeh.models import (
-    BoxZoomTool,
-    Circle,
     ColorBar,
-    ColumnDataSource,
     HoverTool,
     LinearColorMapper,
-    MultiLine,
     PanTool,
-    Plot,
     Range1d,
     ResetTool,
     SaveTool,
-    TapTool,
     WheelZoomTool,
 )
-from bokeh.plotting import curdoc, figure, from_networkx, show
+from bokeh.plotting import figure, from_networkx
 from matplotlib.colors import to_hex, to_rgb
 
 
@@ -87,7 +81,7 @@ class graph_GUI:
 
         Parameters
         -----------
-        graph : NetworkX graph 
+        graph : NetworkX graph
             The Graph attribute of a BallMapper object.
 
         my_palette : matplotlib palette
@@ -188,8 +182,8 @@ class graph_GUI:
 
         Coloring data can be added using the `BallMapper.add_coloring()` method.
         `MIN_VALUE` and `MAX_VALUE` are computed automatically, but lower (resp. higher) \
-        values can be manually specified. 
-    
+        values can be manually specified.
+
         Parameters
         ----------
         variable : string
@@ -311,7 +305,7 @@ def kmapper_visualize(bm, coloring_df, path_html="output.html", title=None, **kw
     )
 
 
-## stole from https://github.com/IBM/matilda/blob/main/matilda/mapper.py
+# stole from https://github.com/IBM/matilda/blob/main/matilda/mapper.py
 def generate_partitions(node_contents, original_element_values):
     """
     Given collections X_i of sets Y_ij and a function U Y_ij -> Z, computes for each i the
@@ -513,33 +507,33 @@ def pie_graph_plot(
     start_angles[0, :] = 0
     # NOW PLOT ALL NODES AS MINI PIE CHARTS
     legend_items = []
-    for l in factors:
+    for k in factors:
         sourced = {}
         sourced["x"] = node_x
         sourced["y"] = node_y
         sourced["radius"] = radii
         # DEALS WITH CASE OF ONE CLASS PER NODE AND BOKEH'S BEHAVIOR
-        for j in range(start_angles[factors_enum[l]].shape[0]):
+        for j in range(start_angles[factors_enum[k]].shape[0]):
             if (
-                start_angles[factors_enum[l], j] == 0
-                and end_angles[factors_enum[l], j] >= 2 * numpy.pi - 1e-3
+                start_angles[factors_enum[k], j] == 0
+                and end_angles[factors_enum[k], j] >= 2 * numpy.pi - 1e-3
             ):
-                end_angles[factors_enum[l], j] = 2 * numpy.pi - 1e-3
-        sourced["start_angle"] = start_angles[factors_enum[l]]
-        sourced["end_angle"] = end_angles[factors_enum[l]]
-        sourced["factor_size"] = factor_sizes[factors_enum[l]]
-        sourced["factor_label"] = [str(l) for _ in node_x]
+                end_angles[factors_enum[k], j] = 2 * numpy.pi - 1e-3
+        sourced["start_angle"] = start_angles[factors_enum[k]]
+        sourced["end_angle"] = end_angles[factors_enum[k]]
+        sourced["factor_size"] = factor_sizes[factors_enum[k]]
+        sourced["factor_label"] = [str(k) for _ in node_x]
         sourced["node_size"] = node_sizes
         sourced["node_label"] = node_labels
         if isinstance(palette, dict):
-            sourced["color"] = [palette[l]] * len(node_x)
+            sourced["color"] = [palette[k]] * len(node_x)
         else:
-            sourced["color"] = [palette[factors_enum[l]]] * len(node_x)
+            sourced["color"] = [palette[factors_enum[k]]] * len(node_x)
         source = ColumnDataSource(sourced)
         all_node_sources.append(source)
         legend_items += [
             (
-                l,
+                k,
                 p.wedge(
                     x="x",
                     y="y",
@@ -550,7 +544,7 @@ def pie_graph_plot(
                     fill_color="color",
                     alpha=0.9,
                     line_width=0,
-                    legend_label=str(l),
+                    legend_label=str(k),
                 ),
             )
         ]
@@ -692,7 +686,7 @@ node_increase_size_js_code = """
                                     {
                                         radius[i] = radius[i] * 1.25
                                     }
-                                    sources[j].change.emit()  
+                                    sources[j].change.emit()
                                 }
                             """
 
@@ -706,6 +700,6 @@ node_decrease_size_js_code = """
                                     {
                                         radius[i] = radius[i] / 1.25
                                     }
-                                    sources[j].change.emit()  
+                                    sources[j].change.emit()
                                 }
                             """
