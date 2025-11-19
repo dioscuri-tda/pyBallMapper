@@ -1,13 +1,12 @@
+import networkx as nx
 import numpy as np
 import pandas as pd
-import networkx as nx
-
-from sklearn.cluster import DBSCAN
 from scipy.sparse import csr_matrix
-
+from sklearn.cluster import DBSCAN
 from tqdm.auto import tqdm
 
 from .ballmapper import BallMapper
+
 
 class MapperonBallMapper(BallMapper):
     def __init__(
@@ -106,12 +105,12 @@ class MapperonBallMapper(BallMapper):
                 # if they share at least one element
                 for cluster in labels:
                     for neigh_cluster in neigh_labels:
-                        points_covered_by_cluster = cover_BM.nodes[node]["points covered"][
-                            np.where(db.labels_ == cluster)
-                        ]
-                        points_covered_by_neigh = cover_BM.nodes[neigh]["points covered"][
-                            np.where(neigh_db.labels_ == neigh_cluster)
-                        ]
+                        points_covered_by_cluster = cover_BM.nodes[node][
+                            "points covered"
+                        ][np.where(db.labels_ == cluster)]
+                        points_covered_by_neigh = cover_BM.nodes[neigh][
+                            "points covered"
+                        ][np.where(neigh_db.labels_ == neigh_cluster)]
                         if (
                             len(
                                 set(points_covered_by_cluster)
@@ -126,11 +125,13 @@ class MapperonBallMapper(BallMapper):
 
         # re-label the nodes to integers, and move the 'node_cluster' info to labels
         # this is to ensure that bokeh behaves well
-        # better to use integers as node keys 
+        # better to use integers as node keys
         for node in new_graph.nodes:
             new_graph.nodes[node]["label"] = str(node)
 
         # convert node labels to int
-        nx.relabel_nodes(new_graph, {n: i for i, n in enumerate(new_graph.nodes)}, copy=False)
+        nx.relabel_nodes(
+            new_graph, {n: i for i, n in enumerate(new_graph.nodes)}, copy=False
+        )
 
         self.Graph = new_graph

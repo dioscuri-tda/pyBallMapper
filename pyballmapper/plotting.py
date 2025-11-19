@@ -1,31 +1,24 @@
+import networkx as nx
 import numpy as np
 import pandas as pd
-import networkx as nx
-
-from matplotlib.colors import to_hex, to_rgb
-
-import networkx as nx
-
-from bokeh.plotting import figure, show
-
 from bokeh.models import (
     BoxZoomTool,
     Circle,
-    HoverTool,
-    Plot,
-    ResetTool,
+    ColorBar,
     ColumnDataSource,
+    HoverTool,
+    LinearColorMapper,
+    MultiLine,
+    PanTool,
+    Plot,
+    Range1d,
+    ResetTool,
+    SaveTool,
     TapTool,
     WheelZoomTool,
-    PanTool,
-    SaveTool,
-    Range1d,
-    MultiLine,
-    ColorBar,
-    LinearColorMapper,
 )
-
-from bokeh.plotting import from_networkx, figure, curdoc
+from bokeh.plotting import curdoc, figure, from_networkx, show
+from matplotlib.colors import to_hex, to_rgb
 
 
 # creates a nx graph that bokeh can plot
@@ -291,8 +284,9 @@ def kmapper_visualize(bm, coloring_df, path_html="output.html", title=None, **kw
     title : string, optional
         title to be displayed in the top bar, by default None
     """
-    import kmapper as km
     from collections import defaultdict
+
+    import kmapper as km
 
     mapper = km.KeplerMapper(verbose=0)
 
@@ -313,7 +307,7 @@ def kmapper_visualize(bm, coloring_df, path_html="output.html", title=None, **kw
         color_values=coloring_df.to_numpy(),
         color_function_name=coloring_df.columns.tolist(),
         title=title,
-        **kwargs
+        **kwargs,
     )
 
 
@@ -434,10 +428,20 @@ def pie_graph_plot(
 
 
     """
-    import networkx, numpy, pathlib, os, warnings
+    import os
+    import pathlib
+    import warnings
+
     import bokeh.plotting
-    from bokeh.models import HoverTool, CustomAction
-    from bokeh.models import ColumnDataSource, CustomJS, LabelSet
+    import networkx
+    import numpy
+    from bokeh.models import (
+        ColumnDataSource,
+        CustomAction,
+        CustomJS,
+        HoverTool,
+        LabelSet,
+    )
 
     if g is None and nodes is None and edges is None:
         raise ValueError("At least one of g, nodes, or edges must be provided.")
@@ -631,8 +635,9 @@ def init_bokeh_figure(
     outline_line_width,
     outline_line_color,
 ):
+    import bokeh.plotting
+    import networkx
     from bokeh.models import BoxZoomTool, WheelZoomTool
-    import bokeh.plotting, networkx
 
     box_zoom_tool = BoxZoomTool(match_aspect=False)
     wheel_zoom_tool = WheelZoomTool(speed=0.002, zoom_on_axis=False)

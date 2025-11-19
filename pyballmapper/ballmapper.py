@@ -1,17 +1,13 @@
-import numpy as np
-import pandas as pd
-import networkx as nx
-
-import matplotlib.pyplot as plt
-from matplotlib import colormaps as cm
-
+import copy
 import warnings
 
-from tqdm.auto import tqdm
-
+import matplotlib.pyplot as plt
+import networkx as nx
+import numpy as np
+import pandas as pd
+from matplotlib import colormaps as cm
 from numba import njit
-
-import copy
+from tqdm.auto import tqdm
 
 
 @njit
@@ -356,7 +352,7 @@ def _find_landmarks(
     order=None,
     method=None,
     verbose=False,
-    **kwargs
+    **kwargs,
 ):
     """Finds the landmaks points. At the moment the only option is a greedy search
 
@@ -433,7 +429,7 @@ class BallMapper:
         order=None,
         method=None,
         verbose=False,
-        **kwargs
+        **kwargs,
     ):
         """Create a BallMapper graph from vector array or distance matrix.
 
@@ -735,7 +731,7 @@ class BallMapper:
         MIN_SCALE=100,  # default in nx.draw_networkx is 300
         MAX_SCALE=600,
         pos=None,
-        **kwargs
+        **kwargs,
     ):
         """Wrapper around the `networkx.draw_networkx` method with colorbar support.
 
@@ -791,7 +787,7 @@ class BallMapper:
             ],
             alpha=0.8,
             ax=ax,
-            **kwargs
+            **kwargs,
         )
 
         # plot a legend
