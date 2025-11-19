@@ -11,14 +11,14 @@ version = {attr = "pyballmapper.__version__"}
 [project]
 name = "pyBallMapper"
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.12"
 
 maintainers = [
     {name = "Davide Gurnari"},
 ]
 
 dependencies = [
-   "numpy",
+    "numpy",
     "pandas",
     "networkx",
     "matplotlib",
@@ -28,3 +28,11 @@ dependencies = [
 ]
 
 dynamic = ["version"]
+
+[tool.black]
+line-length = 88
+target-version = ["py312"] 
+
+[tool.isort]
+profile = "black"
+line_length = 88
