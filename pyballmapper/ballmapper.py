@@ -633,6 +633,11 @@ class BallMapper:
             X, eps, orbits, metric, order, method, verbose, **kwargs
         )
 
+        # store landmarks points (centers of the balls)
+        self.landmarks_data = pd.DataFrame(
+            X[list(landmarks.values()), :], columns=self.column_names
+        )
+
         # find edges
         if verbose:
             print("Running BallMapper ")
