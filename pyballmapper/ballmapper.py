@@ -7,6 +7,7 @@ import numpy as np
 import pandas as pd
 from matplotlib import colormaps as cm
 from numba import njit
+from scipy.spatial.distance import cdist
 from tqdm.auto import tqdm
 
 
@@ -43,7 +44,7 @@ def _find_landmarks_deterministic_nearest_uncovered(
     n = X.shape[0]
 
     # Compute pairwise distances (can be optimized for large datasets)
-    distances = np.linalg.norm(X[:, np.newaxis, :] - X[np.newaxis, :, :], axis=2)
+    distances = cdist(X, X, metric='euclidean')
 
     # Step 1: Find medoid (point minimizing sum of distances to all other points)
     medoid_idx = np.argmin(distances.sum(axis=1))
@@ -589,7 +590,6 @@ class BallMapper:
         """
 
         self.eps = eps
-        self.X = X
 
         # If column names not given, [x1, x2, ..., xd] assigned
         if column_names is not None:
@@ -825,7 +825,7 @@ class BallMapper:
 
         return pd.DataFrame(to_df, columns=["point", "ball"])
 
-    def ball_data(self, ball_numbers):
+    def ball_data(self, X, ball_numbers):
         """returns the data points corresponding to the specified ball numbers
 
         Parameters
@@ -856,7 +856,7 @@ class BallMapper:
         ball_data_frames = {}
         for ball_number in ball_numbers:
             df_of_a_ball = pd.DataFrame(
-                self.X[pab[pab["ball"] == ball_number]["point"], :],
+                X[pab[pab["ball"] == ball_number]["point"], :],
                 columns=self.column_names,
             )
             ball_data_frames[ball_number] = df_of_a_ball
