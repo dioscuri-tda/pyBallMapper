@@ -44,7 +44,7 @@ def _find_landmarks_deterministic_nearest_uncovered(
     n = X.shape[0]
 
     # Compute pairwise distances (can be optimized for large datasets)
-    distances = cdist(X, X, metric='euclidean')
+    distances = cdist(X, X, metric="euclidean")
 
     # Step 1: Find medoid (point minimizing sum of distances to all other points)
     medoid_idx = np.argmin(distances.sum(axis=1))
