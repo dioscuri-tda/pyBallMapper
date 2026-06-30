@@ -1,0 +1,3 @@
+# The repository-root .gitignore excludes *.npy. This folder intentionally
+# ships the bundled example sample (see README, "Data source"), so re-include it.
+!wine_massspec_sample.npy

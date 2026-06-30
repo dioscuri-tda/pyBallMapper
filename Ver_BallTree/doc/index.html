@@ -1,0 +1,895 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FastBallMapper — Why it is faster than pyballmapper</title>
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js" charset="utf-8"></script>
+<style>
+  :root {
+    --fg: #1f2933;
+    --fg-soft: #52606d;
+    --bg: #fafbfc;
+    --panel: #ffffff;
+    --border: #e4e7eb;
+    --accent: #2563eb;
+    --accent-soft: #dbeafe;
+    --code-bg: #f3f4f6;
+    --warn: #c2410c;
+    --good: #047857;
+    --bad: #b91c1c;
+    --table-stripe: #f9fafb;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, "Segoe UI", "Noto Sans KR", Roboto, "Helvetica Neue", Arial, sans-serif;
+    color: var(--fg);
+    background: var(--bg);
+    line-height: 1.6;
+    font-size: 15px;
+  }
+  nav.toc {
+    position: sticky;
+    top: 0;
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+    padding: 10px 24px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px;
+    z-index: 100;
+    font-size: 13.5px;
+  }
+  nav.toc a {
+    color: var(--fg-soft);
+    text-decoration: none;
+    padding: 4px 8px;
+    border-radius: 4px;
+  }
+  nav.toc a:hover { color: var(--accent); background: var(--accent-soft); }
+  nav.toc .brand {
+    font-weight: 600;
+    color: var(--fg);
+    margin-right: auto;
+  }
+  main {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 32px 24px 80px;
+  }
+  section { margin-bottom: 56px; }
+  h1 {
+    font-size: 26px;
+    margin: 0 0 8px;
+    line-height: 1.3;
+  }
+  h2 {
+    font-size: 20px;
+    margin: 0 0 14px;
+    padding-bottom: 6px;
+    border-bottom: 2px solid var(--accent);
+    display: inline-block;
+  }
+  h3 { font-size: 16px; margin: 20px 0 8px; }
+  p { margin: 8px 0 12px; }
+  .lead {
+    color: var(--fg-soft);
+    font-size: 16px;
+    margin-bottom: 24px;
+  }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px 22px;
+    margin: 12px 0;
+  }
+  .panel.compact { padding: 12px 16px; }
+  .grid2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+  @media (max-width: 800px) {
+    .grid2 { grid-template-columns: 1fr; }
+  }
+  code, pre {
+    font-family: "JetBrains Mono", Menlo, Consolas, monospace;
+    font-size: 13px;
+  }
+  code { background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre {
+    background: var(--code-bg);
+    border-left: 3px solid var(--accent);
+    border-radius: 4px;
+    padding: 12px 14px;
+    overflow-x: auto;
+    line-height: 1.5;
+  }
+  pre code { background: none; padding: 0; }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: 13.5px;
+    margin: 8px 0;
+  }
+  th, td {
+    border: 1px solid var(--border);
+    padding: 6px 10px;
+    text-align: right;
+  }
+  th { background: var(--code-bg); font-weight: 600; }
+  td:first-child, th:first-child { text-align: left; }
+  tbody tr:nth-child(even) { background: var(--table-stripe); }
+  .num { font-variant-numeric: tabular-nums; }
+  .good  { color: var(--good); font-weight: 600; }
+  .bad   { color: var(--bad);  font-weight: 600; }
+  .warn  { color: var(--warn); font-weight: 600; }
+  .chart {
+    width: 100%;
+    height: 380px;
+    margin: 8px 0 4px;
+  }
+  details {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 14px;
+    margin: 10px 0;
+  }
+  details[open] { padding: 14px 18px; }
+  summary {
+    cursor: pointer;
+    font-weight: 600;
+    color: var(--accent);
+    padding: 4px 0;
+  }
+  summary:hover { color: #1d4ed8; }
+  details > *:not(summary) { margin-top: 8px; }
+  .kbd {
+    display: inline-block;
+    padding: 1px 6px;
+    font-family: inherit;
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-bottom-width: 2px;
+    border-radius: 4px;
+    font-size: 12px;
+  }
+  .badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 12px;
+    background: var(--accent-soft);
+    color: var(--accent);
+    font-weight: 600;
+    vertical-align: middle;
+  }
+  .badge.warn { background: #fef3c7; color: var(--warn); }
+  .badge.good { background: #d1fae5; color: var(--good); }
+  .footnote {
+    font-size: 12px;
+    color: var(--fg-soft);
+    margin-top: 4px;
+  }
+  ul, ol { padding-left: 22px; }
+  li { margin: 4px 0; }
+</style>
+</head>
+<body>
+
+<nav class="toc">
+  <span class="brand">FastBallMapper Doc</span>
+  <a href="#intro">Introduction</a>
+  <a href="#algo">Per-phase algorithm comparison</a>
+  <a href="#bench">Benchmark</a>
+  <a href="#parallel">Parallelisation limits</a>
+  <a href="#spgemm">SpGEMM optimisation</a>
+  <a href="#refs">References</a>
+</nav>
+
+<main>
+
+<!-- ──────────────────────────────────────────────────────────────────── -->
+<section id="intro">
+  <h1>Why FastBallMapper is faster than <code>pyballmapper</code></h1>
+  <p class="lead">
+    For identical inputs, FastBallMapper produces a <strong>bit-for-bit
+    identical graph</strong> while running 20–36× faster. This page explains
+    why — through the algorithmic changes and measured numbers — and then
+    summarises GPU / multi-core extension options and alternative algorithms
+    that would change the output.
+  </p>
+
+  <div class="panel">
+    <h3>One-line summary</h3>
+    <p>
+      <strong>Almost all</strong> of the speed-up comes from algorithmic
+      replacements. Specifically: (1) the O(N²·D) direct distance loop is
+      replaced by a <strong>BallTree</strong>, and (2) the per-pair Python
+      <code>set.isdisjoint</code> loop is replaced by a
+      <strong>sparse matrix product (SpGEMM)</strong>. Multi-core
+      parallelisation shaves off an extra 1.2–1.6×, but compared to the
+      algorithmic gain (~20–30×), that is a secondary effect.
+    </p>
+  </div>
+</section>
+
+<!-- ──────────────────────────────────────────────────────────────────── -->
+<section id="algo">
+  <h2>Per-phase algorithm comparison</h2>
+  <p>
+    The BallMapper build process splits naturally into 4 phases. For each
+    phase we compare the data structure / algorithm used by
+    <code>pyballmapper</code> (reference) and by FastBallMapper.
+  </p>
+
+  <div class="panel">
+    <table>
+      <thead>
+        <tr>
+          <th>Phase</th>
+          <th>Role</th>
+          <th>pyballmapper (reference)</th>
+          <th>FastBallMapper</th>
+          <th>Complexity change</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>1. Build index</td>
+          <td>Prepare a data structure for distance queries</td>
+          <td>None (linear scan)</td>
+          <td>Build <code>sklearn.neighbors.BallTree</code> once</td>
+          <td><span class="good">O(N²·D) → O(N·D·log N) once</span></td>
+        </tr>
+        <tr>
+          <td>2. Landmark selection</td>
+          <td>Greedy ε-cover selection</td>
+          <td>For every candidate, compute distance to all existing landmarks</td>
+          <td><code>covered</code> boolean mask + single-point <code>query_radius</code></td>
+          <td><span class="good">O(N·L·D) → O(N + L·log N·k̄)</span></td>
+        </tr>
+        <tr>
+          <td>3. Coverage</td>
+          <td>Set of points covered by each ball</td>
+          <td>Recompute every point–landmark pairwise distance</td>
+          <td>Batched <code>query_radius</code> (Cython, GIL-released, threading)</td>
+          <td><span class="good">O(N·L·D) → O(L·log N·k̄) [parallel]</span></td>
+        </tr>
+        <tr>
+          <td>4. Edge finding</td>
+          <td>Add an edge if two balls share at least one point</td>
+          <td>Double loop + Python <code>set</code> intersection</td>
+          <td>Sparse incidence <code>M</code>, computed as <code>M @ M.T</code></td>
+          <td><span class="good">O(L²·k̄) → O(L·k̄²) C++ SpGEMM (no GIL)</span></td>
+        </tr>
+      </tbody>
+    </table>
+    <p class="footnote">
+      N = number of data points, D = dimension, L = number of landmarks,
+      k̄ = mean ball size. On the benchmark data (N=20000, D=100),
+      L ≈ 236–3761 and k̄ ≈ 60–100 depending on eps.
+    </p>
+  </div>
+
+  <h3>Key insights</h3>
+  <ul>
+    <li>
+      Phases 1 and 3 are unified behind a single data structure —
+      <strong>BallTree</strong>. Being Cython-based, it releases the GIL,
+      which lets the threading backend actually parallelise.
+    </li>
+    <li>
+      Phase 4 reframes <strong>"do these two sets share an element?"</strong>
+      as <strong>"do these two rows have a 1 in the same column?"</strong>,
+      reducing it to a matrix product — a single C++ SpGEMM call ends it.
+    </li>
+    <li>
+      The greedy decision order in Phase 2 is preserved →
+      <strong>the output is bit-for-bit identical</strong>.
+    </li>
+  </ul>
+</section>
+
+<!-- ──────────────────────────────────────────────────────────────────── -->
+<section id="bench">
+  <h2>Benchmark results</h2>
+  <p>
+    Measured on <code>wine_massspec_sample.npy</code> (20000 × 100 float32,
+    real GC × GC-HRMS data). Environment: 8 physical / 16 logical cores.
+    Each cell is the mean ± std of 3 independent runs.
+  </p>
+
+  <h3>Test 1 — correctness + isolated speed-ups</h3>
+  <p>
+    Three-way comparison between <code>pyballmapper.BallMapper</code>,
+    <code>FastBallMapper(n_jobs=1)</code>, and
+    <code>FastBallMapper(n_jobs=8)</code>. The algorithmic gain alone
+    (<code>algo_x</code>) and the parallelisation gain alone
+    (<code>par_x</code>) are reported separately.
+  </p>
+  <div class="panel">
+    <table>
+      <thead>
+        <tr>
+          <th>eps</th><th>L</th><th>E</th>
+          <th>t_ref</th><th>t_fast1</th><th>t_fastN</th>
+          <th>algo_x<br><small>(BallTree+SpGEMM)</small></th>
+          <th>par_x<br><small>(parallelisation only)</small></th>
+          <th>total_x</th>
+          <th>Match</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td>0.080</td><td class="num">1183</td><td class="num">3331</td>
+            <td class="num">13.10s</td><td class="num">0.48s</td><td class="num">0.36s</td>
+            <td class="num good">27.1×</td><td class="num">1.3×</td>
+            <td class="num good">36.2×</td><td>OK</td></tr>
+        <tr><td>0.160</td><td class="num">395</td><td class="num">842</td>
+            <td class="num">3.98s</td><td class="num">0.16s</td><td class="num">0.15s</td>
+            <td class="num good">24.4×</td><td class="num">1.1×</td>
+            <td class="num good">27.3×</td><td>OK</td></tr>
+        <tr><td>0.240</td><td class="num">236</td><td class="num">422</td>
+            <td class="num">2.39s</td><td class="num">0.12s</td><td class="num">0.09s</td>
+            <td class="num good">20.1×</td><td class="num">1.3×</td>
+            <td class="num good">25.9×</td><td>OK</td></tr>
+      </tbody>
+    </table>
+    <p class="footnote">
+      The graphs produced by all three (ref / fast1 / fastN) have
+      <strong>exactly the same</strong> landmark index list and edge set.
+      The speed-up is therefore purely implementation efficiency, unrelated
+      to correctness.
+    </p>
+  </div>
+
+  <h3>Test 2 — eps sweep × n_jobs scaling</h3>
+  <p>
+    Sweep eps over 0.04–0.24. Smaller eps yields more landmarks, which
+    increases the share of parallelisable phases (coverage).
+  </p>
+
+  <div id="chart_total" class="chart"></div>
+  <p class="footnote">
+    eps↓ → more landmarks → heavier cover phase → larger parallelisation
+    benefit. Even on 8 cores, total speed-up stays within 1.07–1.64×
+    (Amdahl limit).
+  </p>
+
+  <div id="chart_cover" class="chart"></div>
+  <p class="footnote">
+    The coverage phase alone reaches 2.6–3.1× on 8 cores. The Cython
+    BallTree releases the GIL, so the threading backend actually works.
+  </p>
+
+  <div id="chart_phase_stack" class="chart"></div>
+  <p class="footnote">
+    Per-phase time distribution at n_jobs=1. The smaller the eps, the
+    smaller the share of the serial phases (<code>tree</code> +
+    <code>lmsel</code>) and the larger the share of cover — i.e. the
+    region where parallelisation is more profitable.
+  </p>
+</section>
+
+<!-- ──────────────────────────────────────────────────────────────────── -->
+<section id="parallel">
+  <h2>Why parallelisation has a ceiling</h2>
+
+  <h3>Amdahl's law</h3>
+  <p>
+    The reason total speed-up stays within 1.07–1.64× even on 8 cores is
+    simple — the serial phases are too large. Take the eps=0.04 case:
+  </p>
+  <div class="panel">
+    <pre><code>At n_jobs=1 (total 2.37s):
+  build_tree         ≈ 0.05s   (serial, Cython BallTree)
+  landmark_selection ≈ 1.24s   (serial, greedy)
+  coverage           ≈ 1.07s   (parallelisable)
+  edge_finding       ≈ 0.005s  (single C++ SpGEMM)
+
+Serial fraction = (0.05 + 1.24) / 2.37 ≈ 54.5%
+Theoretical upper bound (Amdahl) = 1 / 0.545 ≈ 1.83×
+Measured (8 cores)               = 1.07×    (≈ 59% of the bound)</code></pre>
+    <p>
+      The remaining 41% is eaten by joblib pool startup cost, per-chunk
+      BallTree call overhead, and thrashing on 8 cores (measured std is
+      ±0.26s — large).
+    </p>
+  </div>
+
+  <h3>GIL trap: why the <em>old</em> edge_finding could not be parallelised</h3>
+  <p>
+    Before SpGEMM was introduced, edge_finding ran a loop like the
+    following under <code>backend="threading"</code>:
+  </p>
+  <pre><code>for u in candidate_neighbors[v]:
+    if u &gt; v and not cov_sets[v].isdisjoint(cov_sets[u]):
+        ...</code></pre>
+  <p>
+    <code>set.isdisjoint</code> is implemented in C inside CPython but
+    <strong>does not release the GIL</strong>. So even with 8 threads on
+    the threading backend, only one can run at a time → measurements were
+    <strong>0.20×–0.85×</strong>, i.e. actually slower (only joblib
+    overhead was added). After SpGEMM, the entire phase finishes in ~3 ms
+    via one C++ call, making the parallelisation question moot.
+  </p>
+
+  <h3>Per-phase parallelisation summary</h3>
+  <div class="panel">
+    <table>
+      <thead>
+        <tr><th>Phase</th><th>Parallelisable?</th><th>Reason</th><th>Measured 8-core speed-up</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>build_tree</td>
+            <td><span class="badge warn">No</span></td>
+            <td>sklearn BallTree construction is single-threaded C code</td>
+            <td>~1.0×</td></tr>
+        <tr><td>landmark_selection</td>
+            <td><span class="badge warn">No</span></td>
+            <td>Greedy — the i-th decision depends on the (i−1)-th</td>
+            <td>~1.0×</td></tr>
+        <tr><td>coverage</td>
+            <td><span class="badge good">Yes</span></td>
+            <td><code>BallTree.query_radius</code> releases the GIL (Cython)</td>
+            <td><strong>2.6–3.1×</strong></td></tr>
+        <tr><td>edge_finding (old)</td>
+            <td><span class="badge warn">Effectively no</span></td>
+            <td>Python set operations — serialised by the GIL</td>
+            <td>0.2–0.9×</td></tr>
+        <tr><td>edge_finding (SpGEMM)</td>
+            <td><span class="badge">N/A</span></td>
+            <td>Single C++ call, ~3 ms — parallelisation is meaningless</td>
+            <td>—</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ──────────────────────────────────────────────────────────────────── -->
+<section id="spgemm">
+  <h2>SpGEMM edge_finding — concrete application</h2>
+
+  <h3>Idea</h3>
+  <p>
+    If each landmark's coverage is represented as a sparse 0/1 incidence
+    matrix, then the intersection size of two balls is simply the dot
+    product of two rows. To compute every pair at once, one matrix product
+    is enough:
+  </p>
+  <div class="panel">
+    <pre><code>M ∈ {0,1}^(L × N)    where  M[v, p] = 1  iff  point p ∈ ball v
+S = M @ M.T          where  S[v, u] = |cov(v) ∩ cov(u)|
+
+edge (v, u)  ⇔  S[v, u] &gt; 0   (and v &lt; u)</code></pre>
+    <p>
+      The triangle-inequality prefilter is <strong>automatic</strong> — if
+      two balls lie more than 2·ε apart, then cov(v) and cov(u) are
+      disjoint, so the corresponding entry of the sparse product is zero.
+      The cost of building a second BallTree disappears.
+    </p>
+  </div>
+
+  <h3>Implementation</h3>
+  <pre><code>indptr = np.empty(L + 1, dtype=np.int64)
+indptr[0] = 0
+np.cumsum([len(arr) for arr in coverage_arrays], out=indptr[1:])
+indices = np.concatenate(coverage_arrays).astype(np.int64, copy=False)
+data    = np.ones(int(indptr[-1]), dtype=np.int32)
+
+M = csr_matrix((data, indices, indptr), shape=(L, N))
+S = (M @ M.T).tocoo()
+mask = S.row &lt; S.col
+all_edges = list(zip(S.row[mask].tolist(), S.col[mask].tolist()))</code></pre>
+
+  <h3>Measurement: edge_finding time comparison</h3>
+  <div id="chart_spgemm" class="chart"></div>
+  <p class="footnote">
+    Python <code>set.isdisjoint</code> loop → C++ SpGEMM. At eps=0.04,
+    <strong>0.401s → 0.005s (~80×)</strong>. The smaller the eps, the
+    larger the effect (the region where the candidate-pair count
+    explodes). Correctness is preserved — landmark indices and edge sets
+    are bit-for-bit identical.
+  </p>
+
+  <h3>Total speed-up change visible in Test 1 (algo_x)</h3>
+  <div class="panel">
+    <table>
+      <thead>
+        <tr>
+          <th>eps</th>
+          <th>algo_x before<br><small>(BallTree only)</small></th>
+          <th>algo_x after<br><small>(BallTree + SpGEMM)</small></th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td>0.08</td><td>22.8×</td><td class="good">27.1×</td></tr>
+        <tr><td>0.16</td><td>23.2×</td><td class="good">24.4×</td></tr>
+        <tr><td>0.24</td><td>20.9×</td><td class="good">20.1×</td></tr>
+      </tbody>
+    </table>
+    <p class="footnote">
+      At eps=0.08, algo_x improves from 22.8× to 27.1×. For small L
+      (e.g. eps=0.24), edge_finding was already negligible, so the gain
+      is small too. The real win shows up in Test 2 at eps=0.04: total
+      time 3.25s → 2.37s.
+    </p>
+  </div>
+</section>
+
+<!-- ──────────────────────────────────────────────────────────────────── -->
+<section id="refs">
+  <h2>References — how to push further</h2>
+
+  <!-- ─── 3-1: algorithm-altering alternatives ─── -->
+  <details>
+    <summary>1. If slightly different output is acceptable — alternative landmark-selection algorithms</summary>
+
+    <p>
+      FastBallMapper currently guarantees <strong>bit-for-bit identical</strong>
+      output to the reference. Relaxing this constraint allows Phase 2
+      (serial greedy) to be replaced by faster or more uniform cover
+      schemes. However, analytical results (especially the topology of the
+      mapper graph) may change, so <strong>domain validation is
+      required</strong>.
+    </p>
+
+    <h3>(a) Farthest-Point Sampling (FPS) / k-center greedy</h3>
+    <ul>
+      <li>At each step, select as a new landmark the point that is
+        "farthest from any current landmark".</li>
+      <li>Pros: more uniform cover, deterministic (given a seed), fast GPU
+        implementations exist (PyTorch3D <code>sample_farthest_points</code>,
+        Open3D, NVIDIA cuVS).</li>
+      <li>Cons: produces a different landmark set than greedy ε-cover. The
+        resulting graph's node count and structure change.</li>
+      <li>Best when: topological analysis only cares about the mapper
+        graph's shape and an exact landmark mapping is not needed.</li>
+    </ul>
+
+    <h3>(b) Leader clustering (BIRCH-style)</h3>
+    <ul>
+      <li>A single sequential scan: assign each point to the first leader
+        whose ball it falls into; create a new leader if none does.
+        <strong>O(N·L) 1-pass</strong>.</li>
+      <li>Pros: extremely fast, memory-efficient, results are essentially
+        the same as greedy (only the order dependence differs).</li>
+      <li>Cons: fast even without a BallTree, but the sklearn
+        implementation is not standardised (you write your own or wrap
+        BIRCH).</li>
+      <li>Best when: prototyping fast, and order dependence is acceptable.</li>
+    </ul>
+
+    <h3>(c) Block-parallel greedy (Luby-style MIS)</h3>
+    <ul>
+      <li>Partition points into blocks; in parallel within each block,
+        mark "independent" landmark candidates → resolve conflicts → next
+        round. An application of probabilistic maximal-independent-set
+        algorithms.</li>
+      <li>Pros: real multi-core parallelisation. cuGraph offers a GPU MIS.</li>
+      <li>Cons: each run yields a different landmark set (randomness). It
+        is reproducible for fixed data/seed but requires comparison
+        validation.</li>
+      <li>Best when: very large N (>10⁶), where the serial nature of
+        greedy must be broken.</li>
+    </ul>
+
+    <p>
+      All three approaches require <strong>"the analytical results are
+      essentially the same as the greedy ε-cover" domain validation</strong>
+      before being safe. Once validated, Phase 2 itself can be moved to
+      parallel/GPU, breaking through the Amdahl ceiling (~1.8×).
+    </p>
+  </details>
+
+  <!-- ─── 3-2: GPU ─── -->
+  <details>
+    <summary>2. GPU acceleration — where and when does it matter?</summary>
+
+    <h3>Per-phase GPU options</h3>
+    <table>
+      <thead>
+        <tr><th>Phase</th><th>Library</th><th>Exact/approx</th><th>Current data<br>(N=2×10⁴, D=100)</th><th>Large scale<br>(N≥10⁵, D≥500)</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>1 + 3 (radius queries)</td>
+            <td>cuML <code>NearestNeighbors</code><br>(brute-force)</td>
+            <td>Exact</td>
+            <td>Essentially a tie<br>(transfer overhead)</td>
+            <td><span class="good">10–100×</span></td></tr>
+        <tr><td>1 + 3</td>
+            <td>FAISS-GPU<br><code>range_search</code></td>
+            <td>Depends on index</td>
+            <td>Weak<br>(GPU range API constraints)</td>
+            <td>5–50×</td></tr>
+        <tr><td>1 + 3</td>
+            <td>NVIDIA cuVS / RAFT<br>brute-force</td>
+            <td>Exact</td>
+            <td>Slightly favourable<br>(low overhead)</td>
+            <td>10–100×</td></tr>
+        <tr><td>4 (SpGEMM)</td>
+            <td>CuPy + cuSPARSE<br>(CSR @ CSR.T)</td>
+            <td>Exact</td>
+            <td>Meaningless<br>(already ~3 ms)</td>
+            <td>2–10×</td></tr>
+        <tr><td>2 (greedy)</td>
+            <td>GPU FPS / cuGraph MIS</td>
+            <td>Output changes</td>
+            <td>—</td><td>—</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Practical guidelines</h3>
+    <ul>
+      <li>
+        <strong>At current data scale, GPU yields little or no benefit</strong>.
+        At N=20000, D=100, the CPU BallTree behaves cache-friendly, while
+        GPU transfer + kernel launch overhead
+        (<code>cupy.asarray</code>, ~tens of μs per launch) is larger
+        than the phase time itself.
+      </li>
+      <li>
+        <strong>The crossover is roughly N·D ≥ 10⁶–10⁷</strong>. Higher D
+        defeats BallTree pruning (curse of dimensionality, efficiency
+        drops sharply from D≳50), making GPU brute-force progressively
+        more favourable. At D=600, GPU pulls ahead even at N~10⁴.
+      </li>
+      <li>
+        <strong>FAISS-GPU's <code>range_search</code> is limited even in
+        the latest versions (≥1.8)</strong>. Restrictions on index types
+        (only partial support for Flat) and on result buffer size.
+        For exact radius queries, it is safer to do brute-force kNN with
+        <code>GpuIndexFlatL2</code> using a sufficiently large k and
+        then threshold-filter.
+      </li>
+      <li>
+        <strong>cuML <code>NearestNeighbors(algorithm='brute')</code> is
+        the cleanest drop-in</strong>. <code>radius_neighbors</code>
+        returns a sparse CSR, so Phase 3's output can be fed directly to
+        the SpGEMM (with CuPy, Phase 4 can also be done on the GPU).
+      </li>
+      <li>
+        <strong>Greedy Phase 2 cannot be GPU-accelerated</strong>. If you
+        can change the output, replace it with FPS (cuVS / PyTorch3D) —
+        very fast.
+      </li>
+    </ul>
+
+    <h3>Suggested stack (for large-scale data)</h3>
+    <pre><code>Phase 1 + 3:  cuML NearestNeighbors(algorithm='brute')
+              → radius_neighbors(landmarks, eps)
+Phase 2    :  Keep on CPU (greedy, serial). If output may change, cuVS FPS.
+Phase 4    :  CuPy sparse:  cupyx.scipy.sparse.csr_matrix.dot(M.T)
+              Limit output size with a prefilter mask (S_candidate).
+Phase 5    :  CPU NetworkX (small).</code></pre>
+
+    <p>
+      This stack starts to matter from N ≥ 10⁵, and around N ~ 10⁶ one
+      can expect 5–15× over 8-core CPU and 20–100× over a single core
+      (vendor-benchmark figures; actual measurement required).
+    </p>
+  </details>
+
+  <!-- ─── 3-3: CPU improvements ─── -->
+  <details>
+    <summary>3. What more can be squeezed out of multi-core CPU</summary>
+
+    <p>
+      Now that SpGEMM is in place, the serial phases (build_tree +
+      landmark_selection) are the bottleneck. Reducing or parallelising
+      this serial portion relaxes the Amdahl limit.
+    </p>
+
+    <h3>(a) landmark_selection — bulk query, then update mask</h3>
+    <ul>
+      <li>Now: <code>tree.query_radius(X[i:i+1], r=eps)</code> is called
+        per point (L sklearn entry costs).</li>
+      <li>Improvement: <strong>do one batched query up front</strong> to
+        get all point-to-point ε-neighbours (OpenMP inside Cython). The
+        subsequent greedy loop becomes a pure-Python boolean-mask update —
+        C-level speed.</li>
+      <li>Caveat: memory cost (the full neighbour list is ~O(N·k̄)). If
+        too large, do batched calls in chunks.</li>
+      <li>Expected effect: lmsel <strong>1.24s → 0.2–0.3s</strong>
+        (~5×). Reducing the serial fraction also raises the Amdahl
+        ceiling.</li>
+    </ul>
+
+    <h3>(b) coverage — drop chunking or rely on sklearn's internal OpenMP</h3>
+    <ul>
+      <li>The latest sklearn (≥1.3) <code>BallTree.query_radius</code>
+        supports internal OpenMP parallelism. Multi-core works even from
+        a single call, without joblib chunking. Chunk splitting can
+        actually increase cache misses.</li>
+      <li>Improvement: leave <code>n_jobs=None</code> at the call site
+        and control the OpenMP thread count via
+        <code>threadpoolctl</code>.</li>
+    </ul>
+
+    <h3>(c) edge_finding — already SpGEMM; what else?</h3>
+    <ul>
+      <li>scipy.sparse SpGEMM is single-threaded C++. Faster options:
+        <ul>
+          <li><strong>MKL Sparse BLAS</strong> (Intel MKL's
+            <code>mkl_sparse_spmm</code>): multi-threaded. Wrappable via
+            the <code>sparse_dot_mkl</code> package.</li>
+          <li><strong>New SpGEMM in scipy ≥ 1.13</strong>: 2–3× faster in
+            some cases than the current. You get the benefit automatically
+            after checking the version.</li>
+        </ul>
+      </li>
+      <li>Currently ~3 ms, so the ROI for further optimisation is low.
+        That said, it does matter once L gets above 10⁵.</li>
+    </ul>
+
+    <h3>(d) NetworkX graph construction — expensive at large L</h3>
+    <ul>
+      <li>For L &gt; 10⁴, <code>nx.Graph().add_edges_from(...)</code>
+        itself takes non-trivial time. If breaking the pyballmapper API
+        is acceptable:
+        <ul>
+          <li><code>python-igraph</code>: C-based, 10–100× faster graph
+            build.</li>
+          <li>Keep a simple <code>dict</code> adjacency list and let the
+            caller perform whatever operations they need.</li>
+        </ul>
+      </li>
+    </ul>
+
+    <h3>(e) Data memory / cache friendliness</h3>
+    <ul>
+      <li>Currently <code>X</code> is force-cast to <code>float64</code>.
+        Keeping it as <code>float32</code> makes BallTree distance
+        computation more SIMD-friendly (sklearn supports float32
+        natively). Worth measuring at D≥100, where memory bandwidth is
+        the bottleneck.</li>
+      <li>Pre-sorting points in a spatially friendly order (e.g.
+        Morton/Hilbert) improves BallTree cache efficiency. To preserve
+        identical output to the reference, however, the landmark order
+        (= input point order) must be left untouched.</li>
+    </ul>
+
+    <h3>Estimated combined scenario (eps=0.04 case)</h3>
+    <div class="panel compact">
+      <table>
+        <thead>
+          <tr><th>Change</th><th>Expected total (n_jobs=8)</th><th>Cumulative speed-up</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Current (with SpGEMM)</td><td>2.22s</td><td>1.00×</td></tr>
+          <tr><td>+ batched lmsel</td><td>~1.0s</td><td class="good">~2.2×</td></tr>
+          <tr><td>+ MKL SpGEMM (negligible, ~ms)</td><td>~1.0s</td><td>~2.2×</td></tr>
+          <tr><td>+ float32 BallTree</td><td>~0.8s</td><td>~2.8×</td></tr>
+          <tr><td>+ igraph (L too small, almost no effect)</td><td>~0.8s</td><td>~2.8×</td></tr>
+        </tbody>
+      </table>
+      <p class="footnote">
+        Rough estimate. By ROI:
+        <strong>batched lmsel ≫ float32 ≫ MKL ≫ igraph</strong>.
+      </p>
+    </div>
+  </details>
+
+  <p style="margin-top: 24px; color: var(--fg-soft); font-size: 13px;">
+    This document is written as static HTML in <code>doc/index.en.html</code>.
+    The benchmark numbers quote actual measurements from
+    <code>benchmark_output.txt</code>; to change parameters, edit the
+    constants at the top of <code>benchmark.py</code>
+    (<code>EPS_VALUES</code>, <code>EPS_LIST_FOR_SCALING</code>,
+    <code>N_TRIALS_SCALING</code>) and rerun.
+  </p>
+</section>
+
+</main>
+
+<script>
+// ─── Chart data (extracted from benchmark_output.txt, post-SpGEMM) ───
+const EPS_LIST = [0.04, 0.06, 0.08, 0.12, 0.24];
+
+const TOTAL_T1 = [2.373, 1.052, 0.519, 0.237, 0.117];     // n_jobs=1
+const TOTAL_T1_STD = [0.104, 0.123, 0.046, 0.001, 0.012];
+const TOTAL_T8 = [2.220, 0.642, 0.363, 0.183, 0.094];     // n_jobs=8
+const TOTAL_T8_STD = [0.258, 0.037, 0.002, 0.001, 0.001];
+
+const COVER_T1 = [1.071, 0.449, 0.220, 0.085, 0.032];
+const COVER_T2 = [0.785, 0.288, 0.154, 0.079, 0.032];
+const COVER_T4 = [0.393, 0.161, 0.083, 0.043, 0.022];
+const COVER_T8 = [0.392, 0.144, 0.080, 0.032, 0.012];
+
+const PHASE_TREE  = [0.049, 0.051, 0.053, 0.048, 0.047];
+const PHASE_LMSEL = [1.241, 0.543, 0.239, 0.099, 0.035];
+const PHASE_COVER = [1.071, 0.449, 0.220, 0.085, 0.032];
+const PHASE_EDGES = [0.005, 0.004, 0.003, 0.002, 0.001];
+
+const EDGE_BEFORE = [0.401, 0.104, 0.044, 0.014, 0.003];
+const EDGE_AFTER  = [0.005, 0.004, 0.003, 0.002, 0.001];
+
+const LAYOUT_BASE = {
+  font: { family: 'inherit', size: 12 },
+  margin: { l: 60, r: 20, t: 36, b: 50 },
+  legend: { orientation: 'h', y: -0.2 },
+  hovermode: 'x unified',
+  paper_bgcolor: 'rgba(0,0,0,0)',
+  plot_bgcolor: 'rgba(0,0,0,0)',
+};
+
+// Chart 1: Total time vs eps, n_jobs=1 vs n_jobs=8
+Plotly.newPlot('chart_total', [
+  {
+    x: EPS_LIST, y: TOTAL_T1,
+    error_y: { type: 'data', array: TOTAL_T1_STD, visible: true },
+    name: 'n_jobs = 1', mode: 'lines+markers',
+    line: { color: '#2563eb', width: 2 },
+    marker: { size: 8 },
+  },
+  {
+    x: EPS_LIST, y: TOTAL_T8,
+    error_y: { type: 'data', array: TOTAL_T8_STD, visible: true },
+    name: 'n_jobs = 8', mode: 'lines+markers',
+    line: { color: '#dc2626', width: 2 },
+    marker: { size: 8 },
+  },
+], Object.assign({}, LAYOUT_BASE, {
+  title: { text: 'Test 2 — total wall-clock time vs eps (mean ± std, n=3)', x: 0 },
+  xaxis: { title: 'eps', tickvals: EPS_LIST },
+  yaxis: { title: 'time (s)', rangemode: 'tozero' },
+}), { displaylogo: false, responsive: true });
+
+// Chart 2: Coverage scaling — speedup vs n_jobs at each eps
+const NJOBS = [1, 2, 4, 8];
+const cover_speedup_traces = EPS_LIST.map((eps, i) => {
+  const t1 = COVER_T1[i];
+  const ys = [t1/COVER_T1[i], t1/COVER_T2[i], t1/COVER_T4[i], t1/COVER_T8[i]];
+  return {
+    x: NJOBS, y: ys, name: `eps = ${eps.toFixed(2)}`,
+    mode: 'lines+markers', line: { width: 2 }, marker: { size: 7 },
+  };
+});
+// add ideal line
+cover_speedup_traces.push({
+  x: NJOBS, y: NJOBS, name: 'ideal (linear)',
+  mode: 'lines', line: { dash: 'dot', color: '#9ca3af' },
+});
+Plotly.newPlot('chart_cover', cover_speedup_traces, Object.assign({}, LAYOUT_BASE, {
+  title: { text: 'Coverage phase — speedup by n_jobs (per eps)', x: 0 },
+  xaxis: { title: 'n_jobs', tickvals: NJOBS },
+  yaxis: { title: 'speedup vs n_jobs=1', rangemode: 'tozero' },
+}), { displaylogo: false, responsive: true });
+
+// Chart 3: Phase stacked bar at n_jobs=1
+Plotly.newPlot('chart_phase_stack', [
+  { x: EPS_LIST, y: PHASE_TREE,  name: 'build_tree',         type: 'bar', marker: { color: '#3b82f6' } },
+  { x: EPS_LIST, y: PHASE_LMSEL, name: 'landmark_selection', type: 'bar', marker: { color: '#ef4444' } },
+  { x: EPS_LIST, y: PHASE_COVER, name: 'coverage',           type: 'bar', marker: { color: '#10b981' } },
+  { x: EPS_LIST, y: PHASE_EDGES, name: 'edge_finding',       type: 'bar', marker: { color: '#f59e0b' } },
+], Object.assign({}, LAYOUT_BASE, {
+  title: { text: 'Per-phase time distribution at n_jobs=1 (stacked)', x: 0 },
+  barmode: 'stack',
+  xaxis: { title: 'eps', type: 'category' },
+  yaxis: { title: 'time (s)' },
+}), { displaylogo: false, responsive: true });
+
+// Chart 4: edge_finding before/after SpGEMM
+Plotly.newPlot('chart_spgemm', [
+  {
+    x: EPS_LIST.map(e => e.toFixed(2)), y: EDGE_BEFORE,
+    name: 'Before (Python set.isdisjoint)', type: 'bar',
+    marker: { color: '#dc2626' },
+  },
+  {
+    x: EPS_LIST.map(e => e.toFixed(2)), y: EDGE_AFTER,
+    name: 'SpGEMM (M @ M.T)', type: 'bar',
+    marker: { color: '#16a34a' },
+  },
+], Object.assign({}, LAYOUT_BASE, {
+  title: { text: 'edge_finding phase — before and after SpGEMM (n_jobs=1)', x: 0 },
+  xaxis: { title: 'eps', type: 'category' },
+  yaxis: { title: 'time (s)', type: 'log', dtick: 1 },
+}), { displaylogo: false, responsive: true });
+</script>
+
+</body>
+</html>
