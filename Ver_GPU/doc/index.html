@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GPU-waveMIS Ball Mapper — what, how, and why it is faster (N-sweep · ε-sweep analysis)</title>
+<script>
+  window.MathJax = { tex: { inlineMath: [['\\(','\\)']], displayMath: [['\\[','\\]']] } };
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js" async></script>
+<style>
+  :root{
+    --ink:#1b1f24; --muted:#5b6570; --line:#e3e8ee; --bg:#ffffff; --soft:#f6f8fb;
+    --orig:#7f7f7f; --bt:#d62728; --faiss:#ff7f0e; --gpu:#1f77b4;
+    --okbg:#eaf7ee; --ok:#1f8b4c; --warnbg:#fff4e5; --warn:#b9770e;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font:16px/1.7 -apple-system,"Segoe UI",Roboto,"Noto Sans KR",sans-serif;
+    -webkit-font-smoothing:antialiased}
+  .wrap{max-width:980px;margin:0 auto;padding:0 22px 90px}
+  header{background:linear-gradient(135deg,#0d1b2a,#1f3a5f);color:#fff;
+    padding:46px 22px 38px;margin-bottom:34px}
+  header .wrap{padding:0 0}
+  header h1{font-size:30px;line-height:1.25;margin:0 0 10px}
+  header p{margin:0;color:#c9d6e5;font-size:16px}
+  header .lang{margin-top:14px;font-size:13.5px}
+  header .lang a{color:#9ec5ff;text-decoration:underline}
+  h2{font-size:23px;margin:46px 0 12px;padding-top:14px;border-top:1px solid var(--line)}
+  h3{font-size:18px;margin:26px 0 8px}
+  p,li{color:#23282e}
+  .muted{color:var(--muted)}
+  code{background:var(--soft);padding:1px 6px;border-radius:5px;
+    font:14px ui-monospace,"SF Mono",Menlo,Consolas,monospace}
+  pre{background:#0d1b2a;color:#e7eef7;padding:14px 16px;border-radius:9px;
+    overflow:auto;font:13px ui-monospace,Consolas,monospace;line-height:1.55}
+  .tldr{background:var(--soft);border:1px solid var(--line);border-left:5px solid var(--gpu);
+    border-radius:10px;padding:18px 22px;margin:6px 0 8px}
+  .tldr b{color:var(--gpu)}
+  .toc{font-size:14px;color:var(--muted);background:var(--soft);border:1px solid var(--line);
+    border-radius:10px;padding:12px 18px;margin:16px 0}
+  .toc a{color:#2b6cb0;text-decoration:none}.toc a:hover{text-decoration:underline}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:18px 0}
+  .card{border:1px solid var(--line);border-radius:11px;padding:16px 18px;background:#fff}
+  .card h3{margin-top:0}
+  table{border-collapse:collapse;width:100%;margin:16px 0;font-size:14px}
+  th,td{border:1px solid var(--line);padding:7px 10px;text-align:left;vertical-align:top}
+  th{background:var(--soft);font-weight:600}
+  td.r,th.r{text-align:right;font-variant-numeric:tabular-nums}
+  .tag{display:inline-block;padding:1px 9px;border-radius:999px;font-size:12.5px;
+    font-weight:600;color:#fff}
+  .t-orig{background:var(--orig)}.t-bt{background:var(--bt)}.t-faiss{background:var(--faiss)}.t-gpu{background:var(--gpu)}
+  .serial{color:var(--bt);font-weight:700}.parallel{color:var(--gpu);font-weight:700}
+  .ok{color:var(--ok);font-weight:700}
+  .big{color:var(--gpu);font-weight:700}
+  .note{background:var(--warnbg);border:1px solid #f0dcbd;border-radius:9px;padding:12px 16px;color:#7a5a14}
+  .ok-box{background:var(--okbg);border:1px solid #cfe9d6;border-radius:9px;padding:12px 16px;color:#1f6b3e}
+  figure{margin:18px 0;text-align:center}
+  figure img{max-width:100%;border:1px solid var(--line);border-radius:10px}
+  figcaption{color:var(--muted);font-size:13.5px;margin-top:8px}
+  .vizrow{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:14px 0}
+  .viz{border:1px solid var(--line);border-radius:11px;overflow:hidden;background:#fff}
+  .viz .hd{padding:9px 14px;font-weight:600;color:#fff;display:flex;justify-content:space-between;align-items:center}
+  .viz iframe{width:100%;height:430px;border:0;display:block;background:#fafbfc}
+  .viz .hd a{color:#fff;font-size:12.5px;font-weight:500;text-decoration:underline}
+  .kbd{font:13px ui-monospace,Consolas,monospace;background:#0d1b2a;color:#e7eef7;
+    padding:2px 7px;border-radius:5px}
+  @media(max-width:720px){.grid,.vizrow{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <h1>GPU-waveMIS Ball Mapper — what it speeds up, how, and why</h1>
+    <p>A logical comparison of pyBallMapper · BallTree · FAISS · GPU-waveMIS, backed by two measured sweeps (N-sweep · ε-sweep)</p>
+  </div>
+</header>
+
+<div class="wrap">
+
+<div class="tldr">
+  <p style="margin:.2em 0"><b>In one line.</b> The real bottleneck of Ball Mapper is not distance computation but the <b>serial dependency of landmark selection</b>.
+  pyBallMapper (naive), BallTree and FAISS all keep that selection loop <span class="serial">serial</span> and merely speed up the distance queries.
+  GPU-waveMIS uses the equivalence “index-priority greedy selection = <b>maximal independent set (MIS)</b> on the ε-graph” to solve that selection
+  as a <span class="parallel">parallel wavefront</span>, removing the bottleneck itself.
+  The result is the <b>same graph as CPU BallTree</b> (landmark &amp; edge Jaccard&nbsp;=&nbsp;1.0), while in the <b>N-sweep</b> (ε=0.08) it reaches up to
+  <span class="big">~200×</span> over BallTree and does N=10⁶ in 0.85&nbsp;s, and in the <b>ε-sweep</b> the speed-up grows as ε shrinks, hitting
+  <span class="big">up to 2,224×</span> over pyBallMapper and <span class="big">up to 773×</span> over BallTree.</p>
+</div>
+
+<div class="toc">
+  Contents —
+  <a href="#s1">1. What it computes</a> ·
+  <a href="#s2">2. The four implementations</a> ·
+  <a href="#s3">3. Why serial is the bottleneck</a> ·
+  <a href="#s4">4. Key insight: greedy = MIS = wavefront</a> ·
+  <a href="#s5">5. The GPU technology (math)</a> ·
+  <a href="#s6">6. Results A — N-sweep</a> ·
+  <a href="#s7">7. Results B — ε-sweep &amp; L→N degeneracy</a> ·
+  <a href="#s8">8. Correctness + interactive comparison</a> ·
+  <a href="#s9">9. When the speed-up narrows</a> ·
+  <a href="#s10">10. Is this novel? (candid assessment)</a> ·
+  <a href="#s11">References</a>
+</div>
+
+<h2 id="s1">1. The Ball Mapper algorithm — what it computes</h2>
+<p>For data \(X=\{x_1,\dots,x_N\}\subset\mathbb{R}^D\) and radius \(\varepsilon\), Ball Mapper (<a href="https://arxiv.org/abs/1901.07410">Dłotko, 2019</a>) — a single-resolution variant of Mapper (<a href="https://research.math.osu.edu/tgda/mapperPBG.pdf">Singh, Mémoli &amp; Carlsson, 2007</a>) — builds a topological graph in three steps:</p>
+<ol>
+  <li><b>Landmark selection (greedy "leader")</b> — scan points in index order; accept a point as a new landmark <i>iff it is not within \(\varepsilon\) of any already-selected landmark</i>. The set \(L\) is a <b>maximal \(\varepsilon\)-net</b> (pairwise \(>\varepsilon\) apart, and covering every point within \(\varepsilon\)).</li>
+  <li><b>Coverage</b> — points covered by each landmark \(v\): \(\;\mathrm{cov}(v)=\{p:\|x_p-x_v\|\le\varepsilon\}\).</li>
+  <li><b>Edges (nerve)</b> — landmarks \(u,v\) are connected when <code>cov(u) ∩ cov(v) ≠ ∅</code> (they share a covered point).</li>
+</ol>
+<p class="muted">All four implementations compute the <b>same mathematical object</b> (a maximal ε-net + its nerve). They differ only in <b>what they accelerate</b> — and that is what decides performance.</p>
+
+<h2 id="s2">2. The four implementations — what each accelerates, and what it cannot</h2>
+<p>All four target the same graph, but treat the distance query and the selection loop differently.</p>
+<table>
+  <thead><tr>
+    <th>Implementation</th><th>Built on</th><th>Distance query</th><th>Landmark selection</th><th>Hardware</th>
+  </tr></thead>
+  <tbody>
+    <tr>
+      <td><span class="tag t-orig">original</span></td>
+      <td><code>pyballmapper</code> (reference)</td>
+      <td>brute force \(\mathcal{O}(N)\) (naive, no index)</td>
+      <td class="serial">serial greedy</td>
+      <td>1 CPU core</td>
+    </tr>
+    <tr>
+      <td><span class="tag t-bt">BallTree</span></td>
+      <td>sklearn <code>BallTree</code> + joblib</td>
+      <td>spatial index \(\mathcal{O}(\log N)\) query</td>
+      <td class="serial">serial greedy</td>
+      <td>multi-core CPU*</td>
+    </tr>
+    <tr>
+      <td><span class="tag t-faiss">FAISS-cpu</span></td>
+      <td>FAISS <code>IndexFlatL2</code> + <code>range_search</code></td>
+      <td>SIMD flat distance + radius search</td>
+      <td class="serial">serial greedy</td>
+      <td>CPU SIMD</td>
+    </tr>
+    <tr>
+      <td><span class="tag t-gpu">GPU-waveMIS</span></td>
+      <td><code>gpu_ball_mapper.py</code> (this work)</td>
+      <td>batched GEMM (cuBLAS, Gram trick)</td>
+      <td class="parallel">parallel wavefront MIS</td>
+      <td>GPU</td>
+    </tr>
+  </tbody>
+</table>
+<p class="muted">* BallTree parallelizes only the coverage/edge steps; <b>selection stays serial</b>. The point: original, BallTree and FAISS all accelerate the distance query while leaving the <b>true bottleneck (serial selection) intact</b>. Only GPU-waveMIS parallelizes that bottleneck.</p>
+<div class="grid">
+  <div class="card"><h3>pyBallMapper (reference)</h3><p>The simplest, exact baseline. For each candidate it computes distances to all current landmarks in a <b>serial Python loop</b> → \(\mathcal{O}(N\cdot L\cdot D)\), all on one core. It is the correctness <b>ground truth</b>, but practically infeasible for \(N\gtrsim 2\times10^5\).</p></div>
+  <div class="card"><h3>BallTree / FAISS</h3><p>Accelerate the distance query via a spatial index (BallTree) or SIMD flat + radius search (FAISS, <a href="https://arxiv.org/abs/1702.08734">Johnson et al., 2019</a>) → tens-to-hundreds× over naive. But the selection loop is still <span class="serial">serial</span>, so the serial wall re-emerges as N grows.</p></div>
+</div>
+
+<h2 id="s3">3. Why serial is the bottleneck — the "chain of dependencies"</h2>
+<p>Step 1 (selection) is inherently <b>sequential</b>: whether point \(i\) becomes a landmark depends on every decision before \(i\) — so you cannot “compute everything first, then decide at once”. Measured on CPU, <b>selection accounts for 68–76% of total time</b> (coverage ~19%, tree build, etc.). However fast the distance query (BallTree, FAISS), without breaking the serial selection the ceiling is hard. <b>This is exactly where GPU-waveMIS starts.</b></p>
+
+<h2 id="s4">4. Key insight — greedy selection = MIS on the ε-graph = parallel wavefront</h2>
+<p>Define the ε-proximity graph \(G_\varepsilon\): vertices = points, edge \((i,j)\) ⟺ \(\|x_i-x_j\|\le\varepsilon\).</p>
+<div class="ok-box">
+<b>Theorem (equivalence).</b> The landmark set produced by “index-order greedy leader” selection is exactly the
+<b>lexicographically-first maximal independent set (MIS)</b> on \(G_\varepsilon\).
+That is, point \(i\) is a landmark ⟺ \(i\) has no landmark neighbour with a <b>smaller index</b>.
+</div>
+<p><b>Why it parallelizes (wavefront).</b> The “index-priority” rule can be applied simultaneously in rounds. Each round:</p>
+<ol>
+  <li>Among still-active vertices, select <b>all at once</b> those with <b>no active neighbour of smaller index</b> (the index-order “local minima”).</li>
+  <li>Deactivate the selected vertices and all their neighbours.</li>
+  <li>Repeat until no vertex is active.</li>
+</ol>
+<p><b>Justification.</b>
+<i>Independence</i> — two within-ε points \(i<j\) cannot be picked in the same round (the higher index \(j\) sees the smaller active neighbour \(i\) and is disqualified).<br>
+<i>Maximality</i> — a vertex is deactivated only by being selected or by neighbouring a selected vertex, so at the end every point is a landmark or covered by one.<br>
+<i>Identity</i> — both rules (serial and wavefront) enforce the same invariant (“select iff no selected neighbour of smaller index”), so the resulting sets are <b>identical</b> — which is why every measurement gives <b>lm_jaccard = 1.0</b>.</p>
+<p>The gain: serial greedy needs \(\mathcal{O}(N)\) sequential steps, while the wavefront needs only <b>\(\mathcal{O}(\text{number of rounds})\)</b> parallel steps — usually far fewer than \(N\) (each round removes many points at once).</p>
+<p class="muted">This “sequential-greedy = lexicographically-first MIS” view and its parallelizability are <b>classical</b>: parallel MIS goes back to <a href="https://epubs.siam.org/doi/10.1137/0215074">Luby (1986)</a>, and <a href="https://arxiv.org/abs/1202.3205">Blelloch, Fineman &amp; Shun (2012)</a> proved that the <i>sequential greedy</i> MIS itself has only polylogarithmic dependence depth — i.e. it parallelizes — which is exactly the property the wavefront exploits. The leader/ε-net selection lineage traces to greedy farthest-first nets (<a href="https://doi.org/10.1016/0304-3975(85)90224-5">Gonzalez, 1985</a>). Full list in §11.</p>
+
+<h2 id="s5">5. How the GPU actually computes each step (the technology / math)</h2>
+<p>The implementation (<code>gpu_ball_mapper.py</code>) is a <b>single unified 3-pass path</b> that streams points in chunks.</p>
+<h3>5.1 Distance = a single GEMM (Gram trick)</h3>
+<p>Squared distance as an inner product:
+\[ \|a-b\|^2 \;=\; \|a\|^2 + \|b\|^2 - 2\,a^{\!\top} b. \]
+The inner products \(a^{\!\top}b\) between one chunk of points and all landmarks come from <b>one matrix product (GEMM, cuBLAS)</b> — the GPU’s strongest operation. No \(\sqrt{\cdot}\); compare against \(\varepsilon^2\).</p>
+<h3>5.2 fp32 + mean-centering</h3>
+<p>Distances are translation-invariant, so subtracting the mean shrinks \(\|x\|^2\) and greatly reduces <b>catastrophic cancellation</b> near the boundary in the Gram subtraction. <b>fp32 is required</b> here — TF32 (10-bit mantissa) cannot resolve the \(\varepsilon^2\) boundary and produces an <i>invalid</i> net (so fp32 is the default; TF32 is opt-in with a warning).</p>
+<h3>5.3 3-pass chunk streaming — never materialize \(N^2\)</h3>
+<ul>
+  <li><b>Pass 1 (selection):</b> stream points in chunks of ~4096; compare each chunk against all existing landmarks via a chunk×L GEMM to find <b>uncovered rows</b>, then run a <b>wavefront MIS</b> on that small sub-graph and append survivors as new landmarks. → always a valid maximal ε-net.</li>
+  <li><b>Pass 2 (coverage):</b> recompute coverage of all N points against the <b>final</b> landmark set (never reuse the selection mask — the key correctness rule).</li>
+  <li><b>Pass 3 (edges):</b> see 5.4.</li>
+</ul>
+<p>Memory is \(\mathcal{O}(\text{chunk}\cdot L)\), compute \(\mathcal{O}(N\cdot L\cdot D)\) — scaling to \(N=10^6\).</p>
+<h3>5.4 Edges = a sparse matrix product \(S=MM^{\!\top}\) (cuSPARSE)</h3>
+<p>Incidence matrix \(M\in\{0,1\}^{L\times N}\) (1 where a landmark covers a point). Then
+\[ S = M M^{\!\top}, \qquad S_{uv} = |\,\mathrm{cov}(u)\cap\mathrm{cov}(v)\,|. \]
+A nonzero off-diagonal entry ⟺ a shared covered point ⟺ an edge. Computed on-device with cuSPARSE SpGEMM (cupy), using int32/float32 to avoid overflow (with a scipy host fallback).</p>
+
+<h2 id="s6">6. Results A — N-sweep (fixed ε, increasing N)</h2>
+<p class="muted">Hardware <span class="kbd">gp5 / RTX 3060</span>, ε=0.08 fixed, 10-rep, bootstrap of a wine GC×GC-HRMS sample. Artifacts in <code>n_sweep/</code>.</p>
+<p>At fixed ε, sampling the cloud ever more densely makes the landmark count \(L\) <b>saturate</b> toward the covering number (not linear: \(N\) grows 200× while \(L\) grows only ~3.4×, 541→1,832). So both CPU and GPU are roughly linear in \(N\), and the GPU’s huge parallel constant shows up as a <b>~200× saturating speed-up</b>.</p>
+<table>
+  <thead><tr><th class="r">N</th><th class="r">original</th><th class="r">BallTree</th><th class="r">FAISS-cpu</th><th class="r">GPU-waveMIS</th><th class="r">vs orig</th><th class="r">vs BT</th><th class="r">vs FAISS</th><th class="r">L</th></tr></thead>
+  <tbody>
+    <tr><td class="r">5,000</td><td class="r">2.92 s</td><td class="r">0.334 s</td><td class="r">0.110 s</td><td class="r">0.022 s</td><td class="r">132×</td><td class="r">15×</td><td class="r">5.0×</td><td class="r">541</td></tr>
+    <tr><td class="r">20,000</td><td class="r">24.77 s</td><td class="r">1.86 s</td><td class="r">0.780 s</td><td class="r">0.034 s</td><td class="r">720×</td><td class="r">54×</td><td class="r">23×</td><td class="r">1,141</td></tr>
+    <tr><td class="r">50,000</td><td class="r">82.89 s</td><td class="r">7.15 s</td><td class="r">2.49 s</td><td class="r">0.063 s</td><td class="r">1,323×</td><td class="r">114×</td><td class="r">40×</td><td class="r">1,487</td></tr>
+    <tr><td class="r">100,000</td><td class="r">178.3 s</td><td class="r">16.57 s</td><td class="r">8.66 s</td><td class="r">0.107 s</td><td class="r">1,675×</td><td class="r">156×</td><td class="r">81×</td><td class="r">1,620</td></tr>
+    <tr><td class="r">200,000</td><td class="r">380.1 s</td><td class="r">35.02 s</td><td class="r">19.66 s</td><td class="r">0.205 s</td><td class="r">1,853×</td><td class="r">171×</td><td class="r">96×</td><td class="r">1,701</td></tr>
+    <tr><td class="r">500,000</td><td class="r">—</td><td class="r">91.89 s</td><td class="r">51.36 s</td><td class="r">0.446 s</td><td class="r">—</td><td class="r">206×</td><td class="r">115×</td><td class="r">1,793</td></tr>
+    <tr><td class="r">1,000,000</td><td class="r">—</td><td class="r">168.9 s</td><td class="r">105.1 s</td><td class="r"><b>0.854 s</b></td><td class="r">—</td><td class="r"><b>198×</b></td><td class="r">123×</td><td class="r">1,832</td></tr>
+  </tbody>
+</table>
+<p class="muted">original is \(\mathcal{O}(N\cdot L)\) and practically infeasible for \(N>2\times10^5\) → intentionally skipped (logged). This itself demonstrates the thesis that “naive does not scale”.</p>
+<figure>
+  <img src="nsweep_4way_median.png" alt="build time and speed-up vs N (median)">
+  <figcaption>Build time (left) and speed-up (right) vs N — median + IQR. CPU is <b>measured</b> up to 1M (not extrapolated). Speed-up saturates near ~200×.</figcaption>
+</figure>
+<figure>
+  <img src="nsweep_diag.png" alt="L vs N and Jaccard vs N">
+  <figcaption>Left: landmark count \(L\) saturates (sublinear in \(N\)). Right: lm/edge Jaccard vs BallTree = 1.0 for GPU/FAISS/original at all \(N\).</figcaption>
+</figure>
+<div class="note"><b>Note (median used):</b> the N=10,000 GPU point is a one-off cuSPARSE cold-start spike that inflates the mean (0.41±1.16 s; median ≈0.03 s). The plots above use the <b>median + IQR</b>, robust to it.</div>
+
+<h2 id="s7">7. Results B — ε-sweep &amp; the \(L\to N\) degeneracy (fixed N, shrinking ε)</h2>
+<p class="muted">Hardware <span class="kbd">gp7 / RTX 5060 Ti</span>, N=100k &amp; 1M fixed, ε 0.32→0.02, 10-rep. Artifacts in <code>eps_sweep/</code>.</p>
+<p>Two questions: (a) does “smaller ε → larger GPU speed-up” still hold at large N? (b) what does the regime where ε drops below the inter-point spacing and \(L\to N\) look like?</p>
+
+<h3>7.1 N = 100,000</h3>
+<table>
+  <thead><tr><th class="r">ε</th><th class="r">original</th><th class="r">BallTree</th><th class="r">FAISS</th><th class="r">GPU</th><th class="r">vs orig</th><th class="r">vs BT</th><th class="r">vs FAISS</th><th class="r">L</th><th class="r">E</th></tr></thead>
+  <tbody>
+    <tr><td class="r">0.32</td><td class="r">10.54</td><td class="r">1.12</td><td class="r">0.61</td><td class="r">0.032</td><td class="r">329×</td><td class="r">35×</td><td class="r">19×</td><td class="r">159</td><td class="r">248</td></tr>
+    <tr><td class="r">0.16</td><td class="r">30.91</td><td class="r">2.46</td><td class="r">1.63</td><td class="r">0.042</td><td class="r">736×</td><td class="r">58×</td><td class="r">39×</td><td class="r">440</td><td class="r">1,253</td></tr>
+    <tr><td class="r">0.08</td><td class="r">121.3</td><td class="r">10.66</td><td class="r">6.08</td><td class="r">0.080</td><td class="r">1,512×</td><td class="r">133×</td><td class="r">76×</td><td class="r">1,620</td><td class="r">10,178</td></tr>
+    <tr><td class="r">0.06</td><td class="r">268.3</td><td class="r">30.36</td><td class="r">12.70</td><td class="r">0.155</td><td class="r">1,729×</td><td class="r">196×</td><td class="r">82×</td><td class="r">3,442</td><td class="r">46,156</td></tr>
+    <tr><td class="r">0.04</td><td class="r">3,032.7</td><td class="r">444.1</td><td class="r">129.9</td><td class="r">1.363</td><td class="r"><b>2,224×</b></td><td class="r">326×</td><td class="r">95×</td><td class="r">36,663</td><td class="r">582,610</td></tr>
+    <tr><td class="r">0.03</td><td class="r">—</td><td class="r">1,366.3</td><td class="r">354.2</td><td class="r">1.768</td><td class="r">—</td><td class="r"><b>773×</b></td><td class="r">200×</td><td class="r">98,501</td><td class="r">529</td></tr>
+    <tr><td class="r">0.02</td><td class="r">—</td><td class="r">1,304.6</td><td class="r">352.4</td><td class="r">1.781</td><td class="r">—</td><td class="r">733×</td><td class="r">198×</td><td class="r">100,000</td><td class="r">0</td></tr>
+  </tbody>
+</table>
+
+<h3>7.2 N = 1,000,000</h3>
+<p>For ε≤0.04, \(L\) explodes to 0.18M–1M, so a single CPU baseline rep takes <b>hours</b> (ε=0.04 BallTree single rep observed at &gt;2.3 h). They were intentionally skipped by an \(L\)-threshold and <b>only the GPU was measured</b>. The CPU baseline trend is already established through ε=0.06.</p>
+<table>
+  <thead><tr><th class="r">ε</th><th class="r">BallTree</th><th class="r">FAISS</th><th class="r">GPU</th><th class="r">vs BT</th><th class="r">vs FAISS</th><th class="r">L</th><th class="r">E</th></tr></thead>
+  <tbody>
+    <tr><td class="r">0.32</td><td class="r">15.74</td><td class="r">6.03</td><td class="r">0.174</td><td class="r">90×</td><td class="r">35×</td><td class="r">157</td><td class="r">301</td></tr>
+    <tr><td class="r">0.16</td><td class="r">25.59</td><td class="r">16.49</td><td class="r">0.219</td><td class="r">117×</td><td class="r">75×</td><td class="r">437</td><td class="r">1,233</td></tr>
+    <tr><td class="r">0.08</td><td class="r">106.6</td><td class="r">68.56</td><td class="r">0.592</td><td class="r">180×</td><td class="r">116×</td><td class="r">1,832</td><td class="r">21,093</td></tr>
+    <tr><td class="r">0.06</td><td class="r">342.8</td><td class="r">157.2</td><td class="r">1.294</td><td class="r"><b>265×</b></td><td class="r">121×</td><td class="r">4,190</td><td class="r">157,569</td></tr>
+    <tr><td class="r">0.04</td><td class="r">skipped</td><td class="r">skipped</td><td class="r">47.86</td><td class="r">—</td><td class="r">—</td><td class="r">177,735</td><td class="r"><b>13,046,815</b></td></tr>
+    <tr><td class="r">0.03</td><td class="r">skipped</td><td class="r">skipped</td><td class="r">146.5</td><td class="r">—</td><td class="r">—</td><td class="r">932,005</td><td class="r">196,426</td></tr>
+    <tr><td class="r">0.02</td><td class="r">skipped</td><td class="r">skipped</td><td class="r">156.4</td><td class="r">—</td><td class="r">—</td><td class="r">1,000,000</td><td class="r">0</td></tr>
+  </tbody>
+</table>
+<div class="grid">
+  <figure><img src="eps_N100000_4way_median.png" alt="eps sweep N=100k"><figcaption>N=100k — build time &amp; speed-up vs ε (median). Smaller ε → larger speed-up.</figcaption></figure>
+  <figure><img src="eps_N1000000_4way_median.png" alt="eps sweep N=1M"><figcaption>N=1M — ε≤0.04 is GPU-only (baselines skipped).</figcaption></figure>
+</div>
+<div class="grid">
+  <figure><img src="eps_N100000_diag.png" alt="diag N=100k"><figcaption>N=100k — \(L\) vs ε (left), Jaccard vs ε (right). ε↓ → \(L\to N\).</figcaption></figure>
+  <figure><img src="eps_N1000000_diag.png" alt="diag N=1M"><figcaption>N=1M — same diagnostics. At ε=0.02, \(L=N=10^6\).</figcaption></figure>
+</div>
+<div class="ok-box">
+<b>Two conclusions.</b>
+(a) <b>Smaller ε → larger GPU advantage</b> — at N=100k up to <b>2,224×</b> over pyBallMapper (ε=0.04) and up to <b>773×</b> over BallTree (ε=0.03); at N=1M up to <b>265×</b> over BallTree (ε=0.06, the last point where baselines are still measurable).<br>
+(b) <b>The \(L\to N\) degeneracy is fully mapped</b> — once ε drops below the inter-point spacing, every point becomes its own landmark (\(L\to N\)) and balls separate so edges collapse (at N=100k, E goes 582,610 at ε=0.04 → 529 at ε=0.03 → <b>0 at ε=0.02, L=N</b>). The same reproduces at N=1M (ε=0.02: L=10⁶, E=0). Just before that, the N=1M ε=0.04 graph has <b>13 million edges</b>, yet the GPU finishes in 47.9 s (the baselines would take hours).
+</div>
+
+<h2 id="s8">8. Correctness — V1–V4 + Jaccard, and an interactive comparison</h2>
+<p>Two independent correctness signals were used; they have <b>different coverage</b>, so it is worth being precise about where each applies.</p>
+<ul>
+  <li><b>Graph identity — Jaccard vs BallTree (lm &amp; edge = 1.0).</b> Wherever BallTree was actually run as the reference, the GPU graph is bit-identical to it. This holds for the <b>entire N-sweep</b> (all N, 5k→1M), the <b>entire N=100k ε-sweep</b> (all ε, including the \(L\to N\) degeneracy down to ε=0.02), and the <b>N=1M ε-sweep for ε≥0.06</b>. At the N=1M tail (ε≤0.04) BallTree was skipped (it would take hours), so there is <i>no reference graph to compare against</i> there.</li>
+  <li><b>Independent V1–V4 validity</b> (independence, maximality, exact coverage, exact edges — recomputed from scratch via a separate BallTree). Run on the <b>full N-sweep</b> (all N → valid) and on the <b>N=100k ε-sweep for ε≥0.04</b> (→ valid). The degenerate cells (<b>N=100k ε≤0.03 and all of N=1M</b>) were run with validation <i>disabled</i>, because the exact validator itself becomes the bottleneck at \(L\to N\) — its V1/V3 checks are \(\mathcal{O}(L^2)\)/\(\mathcal{O}(L\!\cdot\!N)\) on a high-dimensional BallTree. For those cells, Jaccard = 1.0 (where a baseline ran) is the standing correctness signal.</li>
+</ul>
+<p>No accuracy was lost for the speed-up, and <b>no fp32 break-even (disagreement vs BallTree) was observed anywhere a comparison was possible</b> — including across the \(L\to N\) degeneracy at N=100k.</p>
+<p class="muted">Same data (N=100,000, ε=0.08), same coloring: the actual BallTree (CPU) and GPU-waveMIS Ball Mappers are shown side by side for <b>one representative configuration</b> (L=1,620, E=10,178, Jaccard=1.0) — this is a single illustrative case, not a per-sweep visualization. Hover/click nodes to confirm the two graphs are identical.</p>
+<div class="vizrow">
+  <div class="viz">
+    <div class="hd" style="background:var(--bt)"><span>BallTree (CPU)</span>
+      <a href="ballmapper_balltree_cpu_N100000.html" target="_blank">open in new tab ↗</a></div>
+    <iframe src="ballmapper_balltree_cpu_N100000.html" title="BallTree CPU Ball Mapper"></iframe>
+  </div>
+  <div class="viz">
+    <div class="hd" style="background:var(--gpu)"><span>GPU-waveMIS</span>
+      <a href="ballmapper_gpu_wavemis_N100000.html" target="_blank">open in new tab ↗</a></div>
+    <iframe src="ballmapper_gpu_wavemis_N100000.html" title="GPU-waveMIS Ball Mapper"></iframe>
+  </div>
+</div>
+
+<h2 id="s9">9. When does the GPU advantage narrow? (honest scaling)</h2>
+<p>The GPU distance work is \(\mathcal{O}(N\cdot L\cdot D)\). When <b>\(L\) saturates sublinearly in \(N\)</b> (N-sweep: a fixed cloud sampled more densely), cost is roughly linear and the speed-up saturates near ~200×. Conversely, when <b>\(L\) grows nearly linearly with \(N\)</b> (the ε-sweep tail: genuinely new structure at every scale, \(L\to N\)), cost becomes nearly quadratic in \(N\) and the GPU rep itself grows (at N=1M: ε=0.04 47.9 s → ε=0.03 146.5 s → ε=0.02 156.4 s). Even there, the CPU baselines become <b>hours</b> (practically infeasible), so the GPU’s real advantage holds in both regimes. <code>build_time_s</code> and \(L\) tell you which regime you are in.</p>
+
+<h2 id="s10">10. Is this novel enough to publish? A candid assessment</h2>
+<p>Short answer: <b>the individual building blocks are all classical — but the specific synthesis, the reduction it rests on, and the validated artifact are a genuine (applied) contribution that fills a real gap.</b> So it is plausibly publishable as an <b>applied / software / systems</b> result, but it is <b>not</b> a new parallel-algorithm in the theory sense. Below is the honest breakdown.</p>
+<div class="grid">
+  <div class="card">
+    <h3>What is <span class="serial">not</span> new (textbook machinery)</h3>
+    <ul>
+      <li><b>Greedy “leader” = lexicographically-first MIS</b> on the ε-graph — a standard equivalence.</li>
+      <li><b>Parallelizing MIS</b> — classical: <a href="https://epubs.siam.org/doi/10.1137/0215074">Luby (1986)</a>; and the sequential-greedy MIS specifically is parallel (<a href="https://arxiv.org/abs/1202.3205">Blelloch–Fineman–Shun, 2012</a>).</li>
+      <li><b>Squared distances as one GEMM</b> (Gram trick) and GPU large-scale similarity — standard ML / <a href="https://arxiv.org/abs/1702.08734">FAISS</a>.</li>
+      <li><b>Edges via a sparse product \(MM^{\!\top}\)</b> (common-neighbour / bipartite projection) — standard sparse linear algebra (cuSPARSE SpGEMM).</li>
+      <li><b>Greedy ε-nets / farthest-first</b> — <a href="https://doi.org/10.1016/0304-3975(85)90224-5">Gonzalez (1985)</a>.</li>
+    </ul>
+    <p class="muted">An HPC/algorithms reviewer would recognise every individual piece. None of the primitives is a new invention.</p>
+  </div>
+  <div class="card">
+    <h3>What <span class="parallel">is</span> new (the contribution)</h3>
+    <ul>
+      <li><b>Diagnosis + reduction:</b> the explicit identification that Ball Mapper’s scaling wall is the <i>serial landmark selection</i> (68–76% of CPU time, §3), and that this step is exactly a lexicographically-first MIS on \(G_\varepsilon\) — recasting a TDA construction step as a problem with a <i>known parallel structure</i>.</li>
+      <li><b>A working, drop-in GPU Ball Mapper</b> (wavefront-MIS selection + GEMM coverage + SpGEMM nerve, fp32-correct at the ε boundary) that is empirically <b>graph-identical</b> to the CPU reference (Jaccard = 1.0, V1–V4) up to <b>N = 10⁶</b>. To our knowledge no prior <i>GPU Ball Mapper</i> exists.</li>
+      <li><b>Orthogonality to the state of the art:</b> the only other recent “efficient Ball Mapper” work (<a href="https://arxiv.org/abs/2601.01405">Bulauan &amp; Manzanares, 2026</a>) speeds up the <i>range queries</i> (BallTree/FAISS, CPU) — precisely the part our measurements show is <b>not</b> the bottleneck. Our selection-parallelisation is complementary, not duplicate.</li>
+    </ul>
+  </div>
+</div>
+<div class="ok-box">
+<b>Verdict.</b> <b>Plausibly publishable as an applied/software contribution</b> — natural homes: a TDA / computational-topology software-or-applications track, a GPU-for-data-science / HPC workshop, or the domain venue of the data itself (GC×GC-HRMS metabolomics / cheminformatics), where “an exact-fidelity GPU Ball Mapper that makes N = 10⁶ routine (100–2,000×)” is a concrete, useful enabler.
+<b>Unlikely as a new <i>algorithm</i></b> at a parallel-algorithms/theory venue — there is no new complexity result or primitive; the parallelisation is textbook.
+</div>
+<p><b>How to make a submission strong:</b> (1) position explicitly against <a href="https://arxiv.org/abs/2601.01405">Bulauan–Manzanares (2026)</a> — same problem, different (non-bottleneck) target; (2) report the \(L\to N\) regime honestly as a limitation (§9), where the GEMM cost turns ~quadratic; (3) include a real domain case study (the wine GC×GC-HRMS analysis) showing analyses that were previously infeasible; (4) an ablation separating the <i>selection</i> speed-up from the <i>distance</i> speed-up, to show the MIS parallelisation — not just “GPU distances” — is what removes the wall.</p>
+<div class="note"><b>Caveat.</b> This is a literature-grounded opinion from an AI assistant, <b>not</b> a peer review and not a TDA/HPC domain expert’s verdict. Treat it as a starting point for deciding venue and framing; a quick sanity-check with a TDA or HPC colleague is worthwhile.</div>
+
+<h2 id="s11">11. References</h2>
+<p class="muted">Links verified June 2026. R1–R2 define the method; R3–R5 are the selection/MIS lineage the wavefront rests on; R6 is the GPU-similarity baseline; R7 is the closest prior art on efficient Ball Mapper; R8 is GPU TDA for a different problem.</p>
+<ol style="font-size:14.5px">
+  <li id="r1"><b>P. Dłotko.</b> “Ball mapper: a shape summary for topological data analysis.” arXiv:1901.07410, 2019. — defines the Ball Mapper algorithm accelerated here. <a href="https://arxiv.org/abs/1901.07410">arxiv.org/abs/1901.07410</a></li>
+  <li id="r2"><b>G. Singh, F. Mémoli, G. Carlsson.</b> “Topological Methods for the Analysis of High Dimensional Data Sets and 3D Object Recognition.” Eurographics Symposium on Point-Based Graphics, 2007. — Mapper, the parent method. <a href="https://research.math.osu.edu/tgda/mapperPBG.pdf">research.math.osu.edu/tgda/mapperPBG.pdf</a></li>
+  <li id="r3"><b>T. F. Gonzalez.</b> “Clustering to minimize the maximum intercluster distance.” Theoretical Computer Science 38:293–306, 1985. — greedy farthest-first ε-nets; the leader-selection lineage. <a href="https://doi.org/10.1016/0304-3975(85)90224-5">doi:10.1016/0304-3975(85)90224-5</a></li>
+  <li id="r4"><b>M. Luby.</b> “A simple parallel algorithm for the maximal independent set problem.” SIAM J. Comput. 15(4):1036–1053, 1986. — the classic parallel MIS. <a href="https://epubs.siam.org/doi/10.1137/0215074">epubs.siam.org/doi/10.1137/0215074</a></li>
+  <li id="r5"><b>G. E. Blelloch, J. T. Fineman, J. Shun.</b> “Greedy Sequential Maximal Independent Set and Matching are Parallel on Average.” SPAA 2012; arXiv:1202.3205. — proves the <i>sequential greedy</i> MIS (our selection rule) has polylog dependence depth ⇒ parallelizes; the backbone of the wavefront. <a href="https://arxiv.org/abs/1202.3205">arxiv.org/abs/1202.3205</a></li>
+  <li id="r6"><b>J. Johnson, M. Douze, H. Jégou.</b> “Billion-scale similarity search with GPUs.” IEEE Trans. Big Data 7(3):535–547, 2019; arXiv:1702.08734. — GPU distance via GEMM / large-scale similarity (the FAISS baseline). <a href="https://arxiv.org/abs/1702.08734">arxiv.org/abs/1702.08734</a></li>
+  <li id="r7"><b>J.-A. Bulauan, J. R. Manzanares.</b> “Exact and Approximate Range Queries for Efficient Ball Mapper Construction.” arXiv:2601.01405, 2026. — closest prior art: optimizes the <i>range queries</i> (BallTree/FAISS), not the selection; no GPU. <a href="https://arxiv.org/abs/2601.01405">arxiv.org/abs/2601.01405</a></li>
+  <li id="r8"><b>S. Zhang, M. Xiao, H. Wang.</b> “GPU-Accelerated Computation of Vietoris–Rips Persistence Barcodes” (Ripser++). arXiv:2003.07989, 2020. — GPU applied to a <i>different</i> TDA computation (persistence), not Ball Mapper selection. <a href="https://arxiv.org/abs/2003.07989">arxiv.org/abs/2003.07989</a></li>
+</ol>
+
+<p class="muted" style="margin-top:40px;border-top:1px solid var(--line);padding-top:14px">
+Generated: 2026-06-27 · Data: bootstrap of the AUS_FA_Ess_2007_2 wine GC×GC-HRMS sample ·
+Hardware: FJFI <b>gp7 (RTX 5060 Ti, ε-sweep)</b> · <b>gp5 (RTX 3060, N-sweep)</b> · 10-rep measurements.
+Implementations bundled here: <code>gpu_ball_mapper.py</code> (GPU-waveMIS), <code>fast_ball_mapper.py</code> (BallTree), <code>pyballmapper</code> (original). FAISS appears in this write-up only as a discussed CPU baseline / prior art — it is <b>not bundled and not part of the benchmark or tests</b> in this folder.
+Raw data: <code>n_sweep/</code>, <code>eps_sweep/</code> (each with <code>repeat_results.json</code> + tables/figures).</p>
+
+</div>
+</body>
+</html>
