@@ -8,7 +8,7 @@ build:
     post_create_environment:
       - pip install uv
     post_install:
-      - uv sync --group docs
+      - UV_PROJECT_ENVIRONMENT=$READTHEDOCS_VIRTUALENV_PATH uv sync --group docs
 
 sphinx:
   configuration: docs/source/conf.py
