@@ -148,9 +148,9 @@ class graph_GUI:
         self.plot: Any = figure(
             width=figsize[0],
             height=figsize[1],
-            x_range=Range1d(-1, 1),
-            y_range=Range1d(-1, 1),
-            output_backend=output_format,
+            x_range=Range1d(-1.0, 1.0),  # type: ignore[arg-type]
+            y_range=Range1d(-1.0, 1.0),  # type: ignore[arg-type]
+            output_backend=output_format,  # type: ignore[arg-type]
         )
 
         self.plot.xaxis.visible = False
@@ -459,7 +459,7 @@ def pie_graph_plot(
     import bokeh.plotting
     import networkx
     import numpy
-    from bokeh.models import (
+    from bokeh.models import (  # type: ignore[attr-defined]
         ColumnDataSource,
         CustomAction,
         CustomJS,
@@ -528,7 +528,7 @@ def pie_graph_plot(
     factors = sorted(list(set.union(*[set(v.keys()) for v in partitions.values()])))
     factors_enum = {f: i for i, f in enumerate(factors)}
     if palette is None:
-        palette = bokeh.palettes.d3["Category10"][max(3, len(factors))]
+        palette = bokeh.palettes.d3["Category10"][max(3, len(factors))]  # type: ignore[assignment]
     factor_sizes = numpy.zeros((len(factors), len(nodes_list)))
     for n in nodes_list:
         for kk, vv in partitions[n].items():
@@ -558,7 +558,7 @@ def pie_graph_plot(
         sourced["node_label"] = node_labels
         if isinstance(palette, dict):
             sourced["color"] = [palette[k]] * len(node_x)
-        else:
+        elif palette is not None:
             sourced["color"] = [palette[factors_enum[k]]] * len(node_x)
         source = ColumnDataSource(sourced)
         all_node_sources.append(source)
@@ -616,7 +616,7 @@ def pie_graph_plot(
         ),
     )
     try:
-        node_size_increase_tool = CustomAction(**params_node_size_increase_tool)
+        node_size_increase_tool = CustomAction(**params_node_size_increase_tool)  # type: ignore[arg-type]
     except ValueError as e:
         warnings.warn(
             "\nWorkaround for bokeh<2.4 exception:\n" + str(e), RuntimeWarning
@@ -624,7 +624,7 @@ def pie_graph_plot(
         params_node_size_increase_tool["icon"] = os.path.join(
             dir_path, "img/plus-icon.png"
         )
-        node_size_increase_tool = CustomAction(**params_node_size_increase_tool)
+        node_size_increase_tool = CustomAction(**params_node_size_increase_tool)  # type: ignore[arg-type]
     params_node_size_decrease_tool = dict(
         icon=pathlib.Path(os.path.join(dir_path, "img/minus-icon.png")),
         description="Decrease node size",
@@ -633,7 +633,7 @@ def pie_graph_plot(
         ),
     )
     try:
-        node_size_decrease_tool = CustomAction(**params_node_size_decrease_tool)
+        node_size_decrease_tool = CustomAction(**params_node_size_decrease_tool)  # type: ignore[arg-type]
     except ValueError as e:
         warnings.warn(
             "\nWorkaround for bokeh<2.4 exception:\n" + str(e), RuntimeWarning
@@ -641,7 +641,7 @@ def pie_graph_plot(
         params_node_size_decrease_tool["icon"] = os.path.join(
             dir_path, "img/minus-icon.png"
         )
-        node_size_decrease_tool = CustomAction(**params_node_size_decrease_tool)
+        node_size_decrease_tool = CustomAction(**params_node_size_decrease_tool)  # type: ignore[arg-type]
     p.add_tools(node_size_decrease_tool)
     p.add_tools(node_size_increase_tool)
     return p
@@ -669,12 +669,12 @@ def init_bokeh_figure(
     p = bokeh.plotting.figure(
         title=title,
         toolbar_location="right",
-        tools=[box_zoom_tool, wheel_zoom_tool, "pan", "reset", "save"],
-        active_scroll=wheel_zoom_tool,
+        tools=[box_zoom_tool, wheel_zoom_tool, "pan", "reset", "save"],  # type: ignore[call-arg]
+        active_scroll=wheel_zoom_tool,  # type: ignore[call-arg]
         match_aspect=match_aspect,
         height=plot_height,
         width=plot_width,
-        sizing_mode=sizing_mode,
+        sizing_mode=sizing_mode,  # type: ignore[arg-type]
         outline_line_width=outline_line_width,
         outline_line_color=outline_line_color,
         background_fill_color=background_fill_color,
