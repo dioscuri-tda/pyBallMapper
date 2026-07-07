@@ -11,8 +11,19 @@ Python version of the BallMapper algorithm described in [arXiv:1901.07410 ](http
 </picture>
 
 ### Install the package 📦   
+
 ```
 pip install pyballmapper
+```
+
+For development, use [uv](https://docs.astral.sh/uv/):
+
+```
+git clone https://github.com/dioscuri-tda/pyBallMapper.git
+cd pyBallMapper
+uv sync                    # install dependencies + project
+uv run --group dev pre-commit install   # install pre-commit & enable git hooks
+uv run --group docs ...    # when building docs
 ```
 
 ### Basic usage
