@@ -1,5 +1,8 @@
+from __future__ import annotations
+
 import networkx as nx
 import numpy as np
+import numpy.typing as npt
 from scipy.sparse import csr_matrix
 from sklearn.cluster import DBSCAN
 from tqdm.auto import tqdm
@@ -10,14 +13,14 @@ from .ballmapper import BallMapper
 class MapperonBallMapper(BallMapper):
     def __init__(
         self,
-        cover_BM,
-        target_space,
-        eps,
-        min_samples=1,
-        dbscan_metric="euclidean",
-        sparse=False,
-        dbg=False,
-    ):
+        cover_BM: BallMapper,
+        target_space: npt.NDArray,
+        eps: float,
+        min_samples: int = 1,
+        dbscan_metric: str = "euclidean",
+        sparse: bool = False,
+        dbg: bool = False,
+    ) -> None:
         """Mapper on BallMapper using DBSCAN as clustering algorithm.
 
         It uses scipy csr sparse matrix to speed up computations.
@@ -53,16 +56,16 @@ class MapperonBallMapper(BallMapper):
 
         """
 
-        new_graph = nx.Graph()
+        new_graph: nx.Graph = nx.Graph()
 
-        cover_BM = cover_BM.Graph
+        cover_graph: nx.Graph = cover_BM.Graph
 
         # creates a sparse CSR matrix
         if sparse:
             target_space = csr_matrix(target_space)
 
-        for node in tqdm(cover_BM.nodes, disable=not (dbg)):
-            X = target_space[cover_BM.nodes[node]["points covered"], :]
+        for node in tqdm(cover_graph.nodes, disable=not (dbg)):
+            X = target_space[cover_graph.nodes[node]["points covered"], :]  # type: ignore[index]
 
             db = DBSCAN(eps=eps, min_samples=min_samples, metric=dbscan_metric).fit(X)
             # create a set of unique labels
@@ -80,20 +83,20 @@ class MapperonBallMapper(BallMapper):
                     print("\t", cluster, (db.labels_ == cluster).sum())
 
                 # retrives the indices of the points_covered by the cluster
-                points_covered_by_cluster = cover_BM.nodes[node]["points covered"][
+                points_covered_by_cluster = cover_graph.nodes[node]["points covered"][
                     np.where(db.labels_ == cluster)
                 ]
                 # creates a node
                 new_graph.add_node(str(node) + "_" + str(cluster))
-                new_graph.nodes[str(node) + "_" + str(cluster)][
-                    "points covered"
-                ] = points_covered_by_cluster
+                new_graph.nodes[str(node) + "_" + str(cluster)]["points covered"] = (
+                    points_covered_by_cluster
+                )
                 new_graph.nodes[str(node) + "_" + str(cluster)]["size"] = len(
                     points_covered_by_cluster
                 )
 
-            for neigh in [v for v in nx.neighbors(cover_BM, node) if v > node]:
-                neigh_X = target_space[cover_BM.nodes[neigh]["points covered"], :]
+            for neigh in [v for v in nx.neighbors(cover_graph, node) if v > node]:
+                neigh_X = target_space[cover_graph.nodes[neigh]["points covered"], :]  # type: ignore[index]
 
                 neigh_db = DBSCAN(
                     eps=eps, min_samples=min_samples, metric=dbscan_metric
@@ -104,10 +107,10 @@ class MapperonBallMapper(BallMapper):
                 # if they share at least one element
                 for cluster in labels:
                     for neigh_cluster in neigh_labels:
-                        points_covered_by_cluster = cover_BM.nodes[node][
+                        points_covered_by_cluster = cover_graph.nodes[node][
                             "points covered"
                         ][np.where(db.labels_ == cluster)]
-                        points_covered_by_neigh = cover_BM.nodes[neigh][
+                        points_covered_by_neigh = cover_graph.nodes[neigh][
                             "points covered"
                         ][np.where(neigh_db.labels_ == neigh_cluster)]
                         if (
@@ -133,4 +136,4 @@ class MapperonBallMapper(BallMapper):
             new_graph, {n: i for i, n in enumerate(new_graph.nodes)}, copy=False
         )
 
-        self.Graph = new_graph
+        self.Graph: nx.Graph = new_graph

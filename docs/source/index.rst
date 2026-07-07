@@ -11,4 +11,5 @@ Welcome to pyBallMapper's documentation!
   
   getting_started.md
   tutorials.md
+  contributing.md
   modules.rst

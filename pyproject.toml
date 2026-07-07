@@ -11,7 +11,7 @@ version = {attr = "pyballmapper.__version__"}
 [project]
 name = "pyBallMapper"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.13"
 
 maintainers = [
     {name = "Davide Gurnari"},
@@ -24,15 +24,32 @@ dependencies = [
     "matplotlib",
     "bokeh",
     "numba",
-    "scikit-learn"
+    "scikit-learn",
+    "tqdm",
 ]
 
 dynamic = ["version"]
 
-[tool.black]
+[tool.ruff]
 line-length = 88
-target-version = ["py312"] 
+target-version = "py313"
+exclude = [".git", "docs/*", "notebooks/*"]
 
-[tool.isort]
-profile = "black"
-line_length = 88
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
+ignore = ["E203", "E501", "E731"]
+
+[tool.mypy]
+python_version = "3.13"
+warn_unused_configs = true
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+markers = []
+norecursedirs = [".git", ".venv"]
+
+[dependency-groups]
+dev = ["pre-commit", "ruff", "mypy", "types-setuptools", "pytest"]
+docs = ["myst-parser", "sphinx-rtd-theme"]
