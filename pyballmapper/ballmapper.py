@@ -384,7 +384,6 @@ def _find_landmarks_adaptive(
 
             # add points in the orbit
             if points_have_orbits:
-
                 eps_o = eps_dict[centers_counter]
 
                 for idx_p_o in orbits[idx_p]:

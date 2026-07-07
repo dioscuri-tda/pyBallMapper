@@ -29,14 +29,15 @@ dependencies = [
 
 dynamic = ["version"]
 
-[tool.black]
+[tool.ruff]
 line-length = 88
-target-version = ["py312"] 
+target-version = "py313"
+exclude = [".git", "docs/*", "notebooks/*"]
 
-[tool.isort]
-profile = "black"
-line_length = 88
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
+ignore = ["E203", "E501", "E731"]
 
 [dependency-groups]
-dev = ["pre-commit"]
+dev = ["pre-commit", "ruff"]
 docs = ["myst-parser", "sphinx-rtd-theme"]

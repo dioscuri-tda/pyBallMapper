@@ -85,9 +85,9 @@ class MapperonBallMapper(BallMapper):
                 ]
                 # creates a node
                 new_graph.add_node(str(node) + "_" + str(cluster))
-                new_graph.nodes[str(node) + "_" + str(cluster)][
-                    "points covered"
-                ] = points_covered_by_cluster
+                new_graph.nodes[str(node) + "_" + str(cluster)]["points covered"] = (
+                    points_covered_by_cluster
+                )
                 new_graph.nodes[str(node) + "_" + str(cluster)]["size"] = len(
                     points_covered_by_cluster
                 )
