@@ -1,7 +1,11 @@
+from __future__ import annotations
+
+from typing import Any
+
 import networkx as nx
 import numpy as np
 import pandas as pd
-from bokeh.models import (
+from bokeh.models import (  # type: ignore[attr-defined]
     ColorBar,
     HoverTool,
     LinearColorMapper,
@@ -12,11 +16,15 @@ from bokeh.models import (
     WheelZoomTool,
 )
 from bokeh.plotting import figure, from_networkx
-from matplotlib.colors import to_hex, to_rgb
+from matplotlib.colors import Colormap, to_hex, to_rgb
+
+from .ballmapper import BallMapper
 
 
 # creates a nx graph that bokeh can plot
-def _create_bokeh_graph(G, my_palette, MIN_SIZE=7, MAX_SIZE=20):
+def _create_bokeh_graph(
+    G: nx.Graph, my_palette: Colormap, MIN_SIZE: int = 7, MAX_SIZE: int = 20
+) -> nx.Graph:
     MAX_NODE_SIZE = max([G.nodes[node]["size"] for node in G.nodes])
 
     for node in G.nodes:
@@ -34,8 +42,13 @@ def _create_bokeh_graph(G, my_palette, MIN_SIZE=7, MAX_SIZE=20):
 
 
 def _color_nodes(
-    G, my_variable, my_palette, MIN_VALUE=10000, MAX_VALUE=-10000, logscale=False
-):
+    G: nx.Graph,
+    my_variable: str,
+    my_palette: Colormap,
+    MIN_VALUE: float = 10000,
+    MAX_VALUE: float = -10000,
+    logscale: bool = False,
+) -> tuple[nx.Graph, float, float]:
     for node in G.nodes:
         if G.nodes[node][my_variable] > MAX_VALUE:
             MAX_VALUE = G.nodes[node][my_variable]
@@ -67,16 +80,16 @@ def _color_nodes(
 class graph_GUI:
     def __init__(
         self,
-        graph,
-        my_palette,
-        tooltips_variables=[],
-        figsize=(800, 600),
-        output_format="svg",
-        render_seed=42,
-        render_iterations=100,
-        MIN_SIZE=7,
-        MAX_SIZE=20,
-    ):
+        graph: nx.Graph,
+        my_palette: Colormap,
+        tooltips_variables: list[str] | None = None,
+        figsize: tuple[int, int] = (800, 600),
+        output_format: str = "svg",
+        render_seed: int = 42,
+        render_iterations: int = 100,
+        MIN_SIZE: int = 7,
+        MAX_SIZE: int = 20,
+    ) -> None:
         """Create a Bokeh plot rapresenting the BallMapper graph.
 
         Parameters
@@ -124,11 +137,15 @@ class graph_GUI:
             values: list of ids of the points covered by the corresponding ball
 
         """
-        self.my_palette = my_palette
+        if tooltips_variables is None:
+            tooltips_variables = []
+        self.my_palette: Colormap = my_palette
 
-        self.bokeh_graph = _create_bokeh_graph(graph, my_palette, MIN_SIZE, MAX_SIZE)
+        self.bokeh_graph: nx.Graph = _create_bokeh_graph(
+            graph, my_palette, MIN_SIZE, MAX_SIZE
+        )
 
-        self.plot = figure(
+        self.plot: Any = figure(
             width=figsize[0],
             height=figsize[1],
             x_range=Range1d(-1, 1),
@@ -153,7 +170,7 @@ class graph_GUI:
         )
         self.plot.toolbar.active_scroll = zoom_tool
 
-        self.graph_renderer = from_networkx(
+        self.graph_renderer: Any = from_networkx(
             graph=self.bokeh_graph,
             layout_function=nx.spring_layout,
             seed=render_seed,
@@ -176,8 +193,12 @@ class graph_GUI:
 
     # this function changes the coloring of the nodes
     def color_by_variable(
-        self, variable, MIN_VALUE=np.inf, MAX_VALUE=-np.inf, logscale=False
-    ):
+        self,
+        variable: str,
+        MIN_VALUE: float = np.inf,
+        MAX_VALUE: float = -np.inf,
+        logscale: bool = False,
+    ) -> tuple[float, float]:
         """Color the BallMapper Bokeh plot nodes using a specific variable.
 
         Coloring data can be added using the `BallMapper.add_coloring()` method.
@@ -218,7 +239,7 @@ class graph_GUI:
 
         return MIN_VALUE, MAX_VALUE
 
-    def color_edges(self):
+    def color_edges(self) -> None:
         """color edges by interpolating between the nodes' colors"""
 
         for edge in self.bokeh_graph.edges:
@@ -231,7 +252,7 @@ class graph_GUI:
             self.bokeh_graph.edges[e]["color"] for e in self.bokeh_graph.edges
         ]
 
-    def add_colorbar(self, num_ticks, low, high):
+    def add_colorbar(self, num_ticks: int, low: float, high: float) -> None:
         """Add a colorbar to the right side of the Bokeh plot.
 
         Parameters
@@ -263,7 +284,13 @@ class graph_GUI:
         self.plot.add_layout(color_bar, "right")
 
 
-def kmapper_visualize(bm, coloring_df, path_html="output.html", title=None, **kwargs):
+def kmapper_visualize(
+    bm: BallMapper,
+    coloring_df: pd.DataFrame,
+    path_html: str = "output.html",
+    title: str | None = None,
+    **kwargs: Any,
+) -> None:
     """leverages kepler-mapper visualization tool to produce an interactive html.
     https://kepler-mapper.scikit-tda.org
 
@@ -284,7 +311,7 @@ def kmapper_visualize(bm, coloring_df, path_html="output.html", title=None, **kw
 
     mapper = km.KeplerMapper(verbose=0)
 
-    graph = {}
+    graph: dict[str, Any] = {}
     graph["nodes"] = defaultdict(list)
     for n in bm.points_covered_by_landmarks:
         graph["nodes"][n] = bm.points_covered_by_landmarks[n]
@@ -306,7 +333,10 @@ def kmapper_visualize(bm, coloring_df, path_html="output.html", title=None, **kw
 
 
 # stole from https://github.com/IBM/matilda/blob/main/matilda/mapper.py
-def generate_partitions(node_contents, original_element_values):
+def generate_partitions(
+    node_contents: dict[Any, list[Any]],
+    original_element_values: dict[Any, Any],
+) -> dict[Any, dict[Any, int]]:
     """
     Given collections X_i of sets Y_ij and a function U Y_ij -> Z, computes for each i the
     count of elements in X_i that map to a given value in Z.
@@ -319,7 +349,7 @@ def generate_partitions(node_contents, original_element_values):
     """
     import collections
 
-    partitions = {}
+    partitions: dict[Any, dict[Any, int]] = {}
     for k, v in node_contents.items():
         partitions[k] = dict(
             collections.Counter([original_element_values[x] for x in v])
@@ -328,27 +358,27 @@ def generate_partitions(node_contents, original_element_values):
 
 
 def pie_graph_plot(
-    partitions,
-    g=None,
-    nodes=None,
-    edges=None,
-    graph_layout=None,
-    radius=0.01,
-    node_labels=None,
-    node_scaling="old",
-    palette=None,
-    background_fill_color="white",
-    title=None,
-    match_aspect=True,
-    edge_width=1,
-    edge_color="black",
-    plot_height=600,
-    plot_width=600,
-    sizing_mode="fixed",
-    show_node_labels=False,
-    outline_line_width=1,
-    outline_line_color="black",
-):
+    partitions: dict[Any, dict[Any, float]],
+    g: nx.Graph | None = None,
+    nodes: list[Any] | None = None,
+    edges: list[tuple[Any, Any]] | None = None,
+    graph_layout: dict[Any, tuple[float, float]] | None = None,
+    radius: float = 0.01,
+    node_labels: list[str] | None = None,
+    node_scaling: str = "old",
+    palette: dict[Any, str] | list[str] | None = None,
+    background_fill_color: str = "white",
+    title: str | None = None,
+    match_aspect: bool = True,
+    edge_width: int = 1,
+    edge_color: str = "black",
+    plot_height: int = 600,
+    plot_width: int = 600,
+    sizing_mode: str = "fixed",
+    show_node_labels: bool = False,
+    outline_line_width: int = 1,
+    outline_line_color: str = "black",
+) -> Any:
     """
     Produces a bokeh plot of a graph where each node is represented by a pie chart.
 
@@ -445,6 +475,7 @@ def pie_graph_plot(
             g.add_nodes_from(nodes)
         if edges is not None:
             g.add_edges_from(edges)
+    assert g is not None
     nodes_list = list(g.nodes())
     if node_labels is None:
         node_labels = list(map(str, g.nodes()))
@@ -480,7 +511,7 @@ def pie_graph_plot(
     if node_scaling == "old":
         node_sizes_min = numpy.amin(node_sizes)
         node_sizes_max = numpy.amax(node_sizes)
-        radii = numpy.interp(
+        radii: Any = numpy.interp(
             node_sizes,
             (node_sizes_min, node_sizes_max),
             (max(node_sizes_min * radius / node_sizes_max, radius / 10), radius),
@@ -508,7 +539,7 @@ def pie_graph_plot(
     # NOW PLOT ALL NODES AS MINI PIE CHARTS
     legend_items = []
     for k in factors:
-        sourced = {}
+        sourced: dict[str, Any] = {}
         sourced["x"] = node_x
         sourced["y"] = node_y
         sourced["radius"] = radii
@@ -617,18 +648,18 @@ def pie_graph_plot(
 
 
 def init_bokeh_figure(
-    g,
-    background_fill_color,
-    title,
-    match_aspect,
-    edge_width,
-    edge_color,
-    plot_height,
-    plot_width,
-    sizing_mode,
-    outline_line_width,
-    outline_line_color,
-):
+    g: nx.Graph,
+    background_fill_color: str,
+    title: str | None,
+    match_aspect: bool,
+    edge_width: int,
+    edge_color: str,
+    plot_height: int,
+    plot_width: int,
+    sizing_mode: str,
+    outline_line_width: int,
+    outline_line_color: str,
+) -> tuple[Any, list[float], list[float]]:
     import bokeh.plotting
     import networkx
     from bokeh.models import BoxZoomTool, WheelZoomTool

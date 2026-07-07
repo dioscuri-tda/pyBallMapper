@@ -1,24 +1,35 @@
+from __future__ import annotations
+
 import copy
 import warnings
+from collections.abc import Callable
+from typing import Any
 
 import matplotlib.pyplot as plt
 import networkx as nx
 import numpy as np
+import numpy.typing as npt
 import pandas as pd
 from matplotlib import colormaps as cm
+from matplotlib.colors import Colormap
 from numba import njit
 from scipy.spatial.distance import cdist
 from tqdm.auto import tqdm
 
 
 @njit
-def _euclid_distance(x, y):
-    return np.linalg.norm(x - y)
+def _euclid_distance(x: np.ndarray, y: np.ndarray) -> float:
+    return float(np.linalg.norm(x - y))
 
 
 def _find_landmarks_deterministic_nearest_uncovered(
-    X, eps, orbits=None, metric=None, order=None, verbose=False
-):
+    X: npt.NDArray,
+    eps: float,
+    orbits: Any = None,
+    metric: Any = None,
+    order: Any = None,
+    verbose: bool | str = False,
+) -> tuple[dict[int, int], dict[int, list[int]], None]:
     """
     Constructs an epsilon-net H ⊆ X such that every point in X is within distance epsilon
     from at least one point in H.
@@ -50,8 +61,8 @@ def _find_landmarks_deterministic_nearest_uncovered(
     medoid_idx = np.argmin(distances.sum(axis=1))
 
     # Initialize data structures
-    net_indices = {0: medoid_idx}
-    coverage = {}
+    net_indices: dict[int, int] = {0: int(medoid_idx)}
+    coverage: dict[int, list[int]] = {}
     covered = np.zeros(n, dtype=bool)
     net_size = 1
 
@@ -70,8 +81,8 @@ def _find_landmarks_deterministic_nearest_uncovered(
         )
 
         # Select the uncovered point closest to any existing ball
-        closest_uncovered_local_idx = np.argmin(min_distances_to_net)
-        closest_uncovered_idx = uncovered_indices[closest_uncovered_local_idx]
+        closest_uncovered_local_idx = int(np.argmin(min_distances_to_net))
+        closest_uncovered_idx = int(uncovered_indices[closest_uncovered_local_idx])
 
         # Add this point to the epsilon-net
         net_indices[net_size] = closest_uncovered_idx
@@ -86,7 +97,14 @@ def _find_landmarks_deterministic_nearest_uncovered(
     return net_indices, coverage, None
 
 
-def _find_landmarks_greedy(X, eps, orbits=None, metric=None, order=None, verbose=False):
+def _find_landmarks_greedy(
+    X: npt.NDArray,
+    eps: float,
+    orbits: Any = None,
+    metric: Any = None,
+    order: Any = None,
+    verbose: bool | str = False,
+) -> tuple[dict[int, int], dict[int, list[int]], None]:
     """Finds the landmaks points via a greedy search procedure.
 
     Selects the first non-covered points in the cosidered order, adds it to the \
@@ -140,7 +158,8 @@ def _find_landmarks_greedy(X, eps, orbits=None, metric=None, order=None, verbose
 
     # set the distance function
     # f is used to access the points
-    f = lambda i: X[i]
+    f: Callable[[Any], Any] = lambda i: X[i]
+    distance: Callable[[Any, Any], Any]
     if metric == "euclidean":
         distance = _euclid_distance
 
@@ -173,7 +192,7 @@ def _find_landmarks_greedy(X, eps, orbits=None, metric=None, order=None, verbose
         points_have_orbits = False
 
     # find landmark points
-    landmarks = {}  # dict of points {idx_v: idx_p, ... }
+    landmarks: dict[int, int] = {}  # dict of points {idx_v: idx_p, ... }
     centers_counter = 0
 
     if verbose:
@@ -208,7 +227,7 @@ def _find_landmarks_greedy(X, eps, orbits=None, metric=None, order=None, verbose
     if verbose:
         print("{} vertices found.".format(centers_counter))
         print("Computing points_covered_by_landmarks...")
-    points_covered_by_landmarks = dict()
+    points_covered_by_landmarks: dict[int, list[int]] = {}
     for idx_v in tqdm(landmarks, disable=not (verbose == "tqdm")):
         points_covered_by_landmarks[idx_v] = []
         for idx_p in order:
@@ -219,8 +238,15 @@ def _find_landmarks_greedy(X, eps, orbits=None, metric=None, order=None, verbose
 
 
 def _find_landmarks_adaptive(
-    X, eps, max_size, eta=0.7, orbits=None, metric=None, order=None, verbose=False
-):
+    X: npt.NDArray,
+    eps: float,
+    max_size: int,
+    eta: float = 0.7,
+    orbits: Any = None,
+    metric: Any = None,
+    order: Any = None,
+    verbose: bool | str = False,
+) -> tuple[dict[int, int], dict[int, list[int]], dict[int, float]]:
     """Finds the landmaks points via a greedy search procedure.
 
     Selects the first non-covered points in the cosidered order, adds it to the \
@@ -277,7 +303,8 @@ def _find_landmarks_adaptive(
 
     # set the distance function
     # f is used to access the points
-    f = lambda i: X[i]
+    f: Callable[[Any], Any] = lambda i: X[i]
+    distance: Callable[[Any, Any], Any]
     if metric == "euclidean":
         distance = _euclid_distance
 
@@ -310,7 +337,7 @@ def _find_landmarks_adaptive(
         points_have_orbits = False
 
     # find landmark points
-    landmarks = {}  # dict of points {idx_v: idx_p, ... }
+    landmarks: dict[int, int] = {}  # dict of points {idx_v: idx_p, ... }
     centers_counter = -1
 
     # check wheter order is a list of lenght = len(points)
@@ -330,8 +357,8 @@ def _find_landmarks_adaptive(
     pbar = tqdm(order, disable=not (verbose == "tqdm"))
 
     # since the radius of every ball might be different, we need to store them
-    eps_dict = dict()
-    points_covered_by_landmarks = dict()
+    eps_dict: dict[int, float] = {}
+    points_covered_by_landmarks: dict[int, list[int]] = {}
 
     for idx_p in pbar:
         # current point
@@ -415,15 +442,15 @@ def _find_landmarks_adaptive(
 
 
 def _find_landmarks(
-    X,
-    eps=None,
-    orbits=None,
-    metric=None,
-    order=None,
-    method=None,
-    verbose=False,
-    **kwargs,
-):
+    X: npt.NDArray,
+    eps: float,
+    orbits: Any = None,
+    metric: Any = None,
+    order: Any = None,
+    method: str | None = None,
+    verbose: bool | str = False,
+    **kwargs: Any,
+) -> tuple[dict[int, int], dict[int, list[int]], dict[int, float] | None]:
     """Finds the landmaks points. At the moment the only option is a greedy search
 
     Parameters
@@ -512,16 +539,16 @@ def _find_landmarks(
 class BallMapper:
     def __init__(
         self,
-        X: np.ndarray,
-        eps,
-        coloring_df=None,
-        orbits=None,
-        metric="euclidean",
-        order=None,
-        method=None,
-        verbose=False,
-        column_names=None,
-        **kwargs,
+        X: npt.NDArray,
+        eps: float,
+        coloring_df: pd.DataFrame | None = None,
+        orbits: npt.NDArray | list | None = None,
+        metric: str = "euclidean",
+        order: list[int] | npt.NDArray[np.int_] | range | None = None,
+        method: str | None = None,
+        verbose: bool | str = False,
+        column_names: list[str] | None = None,
+        **kwargs: Any,
     ):
         """Create a BallMapper graph from vector array or distance matrix.
 
@@ -588,11 +615,11 @@ class BallMapper:
 
         """
 
-        self.eps = eps
+        self.eps: float = eps
 
         # If column names not given, [x1, x2, ..., xd] assigned
         if column_names is not None:
-            self.column_names = column_names
+            self.column_names: list[str] = column_names
         else:
             self.column_names = ["x{}".format(i) for i in range(X.shape[1])]
 
@@ -633,7 +660,7 @@ class BallMapper:
         )
 
         # store landmarks points (centers of the balls)
-        self.landmarks_data = pd.DataFrame(
+        self.landmarks_data: pd.DataFrame = pd.DataFrame(
             X[list(landmarks.values()), :], columns=self.column_names
         )
 
@@ -659,7 +686,7 @@ class BallMapper:
         # create Ball Mapper graph
         if verbose:
             print("Creating Ball Mapper graph...")
-        self.Graph = nx.Graph()
+        self.Graph: nx.Graph = nx.Graph()
         self.Graph.add_nodes_from(landmarks.keys())
         self.Graph.add_edges_from(edges)
 
@@ -681,8 +708,12 @@ class BallMapper:
             print("Done")
 
     def add_coloring(
-        self, coloring_df, custom_function=np.mean, custom_name=None, add_std=False
-    ):
+        self,
+        coloring_df: pd.DataFrame,
+        custom_function: Callable[..., Any] = np.mean,
+        custom_name: str | None = None,
+        add_std: bool = False,
+    ) -> None:
         """Takes pandas dataframe and compute the average and standard deviation \
         of each column for the subset of points colored by each ball.
         Add such values as attributes to each node in the BallMapper graph
@@ -719,8 +750,12 @@ class BallMapper:
                     self.Graph.nodes[node]["{}_std".format(col_name)] = std
 
     def color_by_variable(
-        self, my_variable, my_palette, MIN_VALUE=np.inf, MAX_VALUE=-np.inf
-    ):
+        self,
+        my_variable: str | None,
+        my_palette: Colormap,
+        MIN_VALUE: float = np.inf,
+        MAX_VALUE: float = -np.inf,
+    ) -> tuple[float, float]:
         """Colors the BallMapper graph using a specified variable. The `add_coloring` method needs to be called first. Automatically computes the min and max value for the colormap.
 
         Parameters
@@ -774,7 +809,7 @@ class BallMapper:
 
         return MIN_VALUE, MAX_VALUE
 
-    def filter_by(self, list_of_points):
+    def filter_by(self, list_of_points: list[int]) -> BallMapper:
         """return a copy of the BallMapper object with only the nodes covering a subset of points
 
         Parameters
@@ -814,7 +849,7 @@ class BallMapper:
 
         return filtered_bm
 
-    def points_and_balls(self):
+    def points_and_balls(self) -> pd.DataFrame:
         """returns a DataFrame with the `points_covered_by_landmarks` information
 
         Returns
@@ -822,14 +857,16 @@ class BallMapper:
         pandas.DataFrame
 
         """
-        to_df = []
+        to_df: list[list[int]] = []
         for ball, points in self.points_covered_by_landmarks.items():
             for p in points:
                 to_df.append([p, ball])
 
         return pd.DataFrame(to_df, columns=["point", "ball"])
 
-    def ball_data(self, X, ball_numbers):
+    def ball_data(
+        self, X: npt.NDArray, ball_numbers: int | list[int]
+    ) -> dict[int, pd.DataFrame]:
         """returns the data points corresponding to the specified ball numbers
 
         Parameters
@@ -846,7 +883,7 @@ class BallMapper:
 
         nodes_number = len(self.Graph.nodes)
 
-        if type(ball_numbers) is int:
+        if isinstance(ball_numbers, int):
             ball_numbers = [ball_numbers]
 
         if np.max(np.array(ball_numbers)) >= nodes_number:
@@ -857,7 +894,7 @@ class BallMapper:
             )
 
         pab = self.points_and_balls()
-        ball_data_frames = {}
+        ball_data_frames: dict[int, pd.DataFrame] = {}
         for ball_number in ball_numbers:
             df_of_a_ball = pd.DataFrame(
                 X[pab[pab["ball"] == ball_number]["point"], :],
@@ -867,7 +904,7 @@ class BallMapper:
 
         return ball_data_frames
 
-    def ball_data_index(self, ball_numbers):
+    def ball_data_index(self, ball_numbers: int | list[int]) -> dict[int, list[int]]:
         """returns the indices of data points corresponding to the specified ball numbers
 
         Parameters
@@ -884,7 +921,7 @@ class BallMapper:
 
         nodes_number = len(self.Graph.nodes)
 
-        if type(ball_numbers) is int:
+        if isinstance(ball_numbers, int):
             ball_numbers = [ball_numbers]
 
         if np.max(np.array(ball_numbers)) >= nodes_number:
@@ -895,7 +932,7 @@ class BallMapper:
             )
 
         pab = self.points_and_balls()
-        ball_points_indices_lists = {}
+        ball_points_indices_lists: dict[int, list[int]] = {}
         for ball_number in ball_numbers:
             list_of_point_indices = list(pab[pab["ball"] == ball_number]["point"])
             ball_points_indices_lists[ball_number] = list_of_point_indices
@@ -904,18 +941,18 @@ class BallMapper:
 
     def draw_networkx(
         self,
-        coloring_variable=None,
-        color_palette=cm.get_cmap("Reds"),
-        colorbar=False,
-        colorbar_label=None,
-        ax=None,
-        MIN_VALUE=np.inf,
-        MAX_VALUE=-np.inf,
-        MIN_SCALE=100,  # default in nx.draw_networkx is 300
-        MAX_SCALE=600,
-        pos=None,
-        **kwargs,
-    ):
+        coloring_variable: str | None = None,
+        color_palette: Colormap | None = None,
+        colorbar: bool = False,
+        colorbar_label: str | None = None,
+        ax: plt.Axes | None = None,
+        MIN_VALUE: float = np.inf,
+        MAX_VALUE: float = -np.inf,
+        MIN_SCALE: int = 100,
+        MAX_SCALE: int = 600,
+        pos: dict[int, tuple[float, float]] | None = None,
+        **kwargs: Any,
+    ) -> plt.Axes:
         """Wrapper around the `networkx.draw_networkx` method with colorbar support.
 
         Parameters
@@ -946,6 +983,9 @@ class BallMapper:
         ax
             the matplotlib ax
         """
+        if color_palette is None:
+            color_palette = cm.get_cmap("Reds")
+
         MAX_NODE_SIZE = max(
             [self.Graph.nodes[node]["size"] for node in self.Graph.nodes]
         )

@@ -33,3 +33,6 @@ ENV/
 # Data files
 *.npy
 *.pkl
+
+# mypy
+.mypy_cache/

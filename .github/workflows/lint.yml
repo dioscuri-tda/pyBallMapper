@@ -20,3 +20,6 @@ jobs:
 
       - name: Run pre-commit (ruff)
         run: uv run pre-commit run --all-files
+
+      - name: Run mypy
+        run: uv run mypy pyballmapper/

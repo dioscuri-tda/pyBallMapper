@@ -11,7 +11,7 @@ version = {attr = "pyballmapper.__version__"}
 [project]
 name = "pyBallMapper"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.13"
 
 maintainers = [
     {name = "Davide Gurnari"},
@@ -38,6 +38,11 @@ exclude = [".git", "docs/*", "notebooks/*"]
 select = ["E", "F", "W", "I"]
 ignore = ["E203", "E501", "E731"]
 
+[tool.mypy]
+python_version = "3.13"
+warn_unused_configs = true
+ignore_missing_imports = true
+
 [dependency-groups]
-dev = ["pre-commit", "ruff"]
+dev = ["pre-commit", "ruff", "mypy", "types-setuptools"]
 docs = ["myst-parser", "sphinx-rtd-theme"]
