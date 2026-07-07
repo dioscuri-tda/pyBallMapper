@@ -36,3 +36,7 @@ target-version = ["py312"]
 [tool.isort]
 profile = "black"
 line_length = 88
+
+[dependency-groups]
+dev = ["pre-commit"]
+docs = ["myst-parser", "sphinx-rtd-theme"]
