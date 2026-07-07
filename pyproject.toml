@@ -43,6 +43,12 @@ python_version = "3.13"
 warn_unused_configs = true
 ignore_missing_imports = true
 
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+markers = []
+norecursedirs = [".git", ".venv"]
+
 [dependency-groups]
-dev = ["pre-commit", "ruff", "mypy", "types-setuptools"]
+dev = ["pre-commit", "ruff", "mypy", "types-setuptools", "pytest"]
 docs = ["myst-parser", "sphinx-rtd-theme"]
