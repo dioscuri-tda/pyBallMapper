@@ -24,7 +24,8 @@ dependencies = [
     "matplotlib",
     "bokeh",
     "numba",
-    "scikit-learn"
+    "scikit-learn",
+    "tqdm",
 ]
 
 dynamic = ["version"]
