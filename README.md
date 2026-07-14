@@ -27,6 +27,16 @@ from pyballmapper import BallMapper
 bm = BallMapper(X=my_pointcloud, eps=4.669)
 ```
 
+## Benchmarks
+
+A benchmarking script measures how BallMapper scales with dataset size and eps:
+
+```bash
+uv run python benchmarks/benchmark_ballmapper.py
+```
+
+This produces a `report.html` with mean +/- std timing/memory tables and error-bar plots, and a `results.json` with raw per-run data. See the [benchmark docs](https://pyballmapper.readthedocs.io/en/latest/benchmarks.html) for all options.
+
 ## Documentation
 
 See the [full documentation](https://pyballmapper.readthedocs.io) and [example notebooks](https://github.com/dgurnari/pyBallMapper/tree/main/notebooks).
