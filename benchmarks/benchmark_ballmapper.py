@@ -1,5 +1,7 @@
 """benchmark_ballmapper.py — benchmark BallMapper scaling behaviour.
 
+Adapted from the script by Jooyoung Hahn.
+
 Measures how BallMapper construction time and memory usage scale with:
   - N (dataset size) at fixed eps
   - eps (ball radius) at fixed N
@@ -55,7 +57,7 @@ def _edge_pid_set(bm: BallMapper) -> set[frozenset[int]]:
     return set(frozenset((pid[u], pid[v])) for u, v in bm.Graph.edges)
 
 
-def _identical(bm_a: BallMapper, bm_b: BallMapper) -> bool:
+def _graphs_identical(bm_a: BallMapper, bm_b: BallMapper) -> bool:
     """Check two BallMapper graphs are identical (same landmarks + edges)."""
     return _landmark_ids(bm_a) == _landmark_ids(bm_b) and _edge_pid_set(
         bm_a
@@ -64,26 +66,32 @@ def _identical(bm_a: BallMapper, bm_b: BallMapper) -> bool:
 
 def _timed_build(
     X: np.ndarray, eps: float, method: str | None, reps: int
-) -> tuple[list[float], list[float], BallMapper]:
+) -> tuple[list[float], list[float], bool, BallMapper]:
     """Build BallMapper *reps* times.
 
-    Returns (all_times_s, all_peak_rss_mb, last_object).
+    Returns (all_times_s, all_peak_rss_mb, deterministic, last_object).
+    Determinism is verified by comparing the first and last build.
     Peak RSS is measured via ``tracemalloc``.
     """
     ts: list[float] = []
     peak_mbs: list[float] = []
-    obj: BallMapper | None = None
-    for _ in range(reps):
+    first_obj: BallMapper | None = None
+    last_obj: BallMapper | None = None
+    for i in range(reps):
         tracemalloc.start()
         t0 = time.perf_counter()
-        obj = BallMapper(X=X, eps=eps, method=method)
+        bm = BallMapper(X=X, eps=eps, method=method)
         elapsed = time.perf_counter() - t0
         _, peak_bytes = tracemalloc.get_traced_memory()
         tracemalloc.stop()
         ts.append(elapsed)
         peak_mbs.append(peak_bytes / (1024 * 1024))
-    assert obj is not None  # noqa: S101
-    return ts, peak_mbs, obj
+        if i == 0:
+            first_obj = bm
+        last_obj = bm
+    assert first_obj is not None and last_obj is not None  # noqa: S101
+    deterministic = _graphs_identical(first_obj, last_obj)
+    return ts, peak_mbs, deterministic, last_obj
 
 
 # ── test 1: N-scaling ───────────────────────────────────────────────────────
@@ -102,7 +110,7 @@ def run_n_scaling(
         log(f"  method={label}  eps={eps:.4f}", flush=True)
         for n in ns:
             X = gs.make_highd(n, d=d, seed=n)
-            all_times, all_mems, bm = _timed_build(X, eps, method, reps)
+            all_times, all_mems, deterministic, bm = _timed_build(X, eps, method, reps)
             time_arr = np.array(all_times)
             mem_arr = np.array(all_mems)
             row = {
@@ -115,6 +123,7 @@ def run_n_scaling(
                 "time_std": float(time_arr.std()),
                 "peak_rss_mean_mb": float(mem_arr.mean()),
                 "peak_rss_std_mb": float(mem_arr.std()),
+                "deterministic": deterministic,
                 "times": all_times,
                 "peak_rss_mb": all_mems,
             }
@@ -122,7 +131,8 @@ def run_n_scaling(
             log(
                 f"    N={n:>6d}  L={row['L']:>5d}  E={row['E']:>5d}  "
                 f"t={row['time_mean']:.3f}+/-{row['time_std']:.3f}s  "
-                f"mem={row['peak_rss_mean_mb']:.1f}+/-{row['peak_rss_std_mb']:.1f}MB"
+                f"mem={row['peak_rss_mean_mb']:.1f}+/-{row['peak_rss_std_mb']:.1f}MB  "
+                f"det={deterministic}"
             )
     return rows
 
@@ -143,7 +153,7 @@ def run_eps_scaling(
         label = method or "greedy"
         log(f"  method={label}  N={n}", flush=True)
         for eps in eps_list:
-            all_times, all_mems, bm = _timed_build(X, eps, method, reps)
+            all_times, all_mems, deterministic, bm = _timed_build(X, eps, method, reps)
             time_arr = np.array(all_times)
             mem_arr = np.array(all_mems)
             row = {
@@ -156,6 +166,7 @@ def run_eps_scaling(
                 "time_std": float(time_arr.std()),
                 "peak_rss_mean_mb": float(mem_arr.mean()),
                 "peak_rss_std_mb": float(mem_arr.std()),
+                "deterministic": deterministic,
                 "times": all_times,
                 "peak_rss_mb": all_mems,
             }
@@ -163,7 +174,8 @@ def run_eps_scaling(
             log(
                 f"    eps={eps:.4f}  L={row['L']:>5d}  E={row['E']:>5d}  "
                 f"t={row['time_mean']:.3f}+/-{row['time_std']:.3f}s  "
-                f"mem={row['peak_rss_mean_mb']:.1f}+/-{row['peak_rss_std_mb']:.1f}MB"
+                f"mem={row['peak_rss_mean_mb']:.1f}+/-{row['peak_rss_std_mb']:.1f}MB  "
+                f"det={deterministic}"
             )
     return rows
 
@@ -314,7 +326,17 @@ def build_report(
         f"Landmark methods: <code>{', '.join(meta['methods'])}</code>."
     )
     eps = meta["scaling_eps"]
-    headers = ["method", "N", "L", "E", "time (s)", "peak RSS (MB)"]
+    all_det = all(r["deterministic"] for r in n_rows)
+    rep.callout(
+        (
+            "All builds are <b>deterministic</b> — repeated runs on the same "
+            "input produce identical graphs (same landmarks and edges)."
+            if all_det
+            else "Some builds are <b>non-deterministic</b> — see the table."
+        ),
+        kind="good" if all_det else "warn",
+    )
+    headers = ["method", "N", "L", "E", "time (s)", "peak RSS (MB)", "deterministic"]
     table_rows: list[list[str]] = []
     for r in n_rows:
         table_rows.append(
@@ -325,6 +347,9 @@ def build_report(
                 str(r["E"]),
                 f"{r['time_mean']:.3f} +/- {r['time_std']:.3f}",
                 f"{r['peak_rss_mean_mb']:.1f} +/- {r['peak_rss_std_mb']:.1f}",
+                "<span class='good'>yes</span>"
+                if r["deterministic"]
+                else "<span class='bad'>NO</span>",
             ]
         )
     rep.table(headers, table_rows)
@@ -340,7 +365,7 @@ def build_report(
     # ── Test 2: eps-scaling ──
     rep.h2("Test 2 — eps-scaling at fixed N")
     rep.p(f"N = <code>{meta['scaling_n']:,}</code>.")
-    headers = ["method", "eps", "L", "E", "time (s)", "peak RSS (MB)"]
+    headers = ["method", "eps", "L", "E", "time (s)", "peak RSS (MB)", "deterministic"]
     table_rows = []
     for r in eps_rows:
         table_rows.append(
@@ -351,6 +376,9 @@ def build_report(
                 str(r["E"]),
                 f"{r['time_mean']:.3f} +/- {r['time_std']:.3f}",
                 f"{r['peak_rss_mean_mb']:.1f} +/- {r['peak_rss_std_mb']:.1f}",
+                "<span class='good'>yes</span>"
+                if r["deterministic"]
+                else "<span class='bad'>NO</span>",
             ]
         )
     rep.table(headers, table_rows)
@@ -364,6 +392,7 @@ def build_report(
     rep.html(
         "<ul>"
         "<li>Euclidean metric. Times and memory reported as mean +/- std over the repeats.</li>"
+        "<li>Determinism: first and last builds are compared for identical landmark point-ids and edge sets.</li>"
         "<li>Peak RSS measured via <code>tracemalloc</code> (tracks Python allocations).</li>"
         "<li>Synthetic data: Gaussian mixture, min-max normalised to [0, 1].</li>"
         "</ul>"
