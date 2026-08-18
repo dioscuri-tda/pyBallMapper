@@ -203,6 +203,30 @@ class TestFindLandmarks:
         )
         assert len(l1) == len(l2)
 
+    def test_adaptive_method_without_eta_uses_default(self, simple_2d):
+        """`eta` is optional: the docstring documents only `max_size`."""
+        order = range(len(simple_2d))
+        l1, c1, _ = _find_landmarks(
+            simple_2d,
+            eps=1.0,
+            method="adaptive",
+            max_size=5,
+            metric="euclidean",
+            order=order,
+        )
+        l2, c2, _ = _find_landmarks_adaptive(
+            simple_2d, eps=1.0, max_size=5, metric="euclidean", order=order
+        )
+        assert len(l1) == len(l2)
+
+    def test_unknown_method_raises_value_error(self, simple_2d):
+        with pytest.raises(ValueError, match="unknown method 'gready'"):
+            _find_landmarks(simple_2d, eps=0.5, method="gready")
+
+    def test_ballmapper_rejects_unknown_method(self, simple_2d):
+        with pytest.raises(ValueError, match="unknown method"):
+            BallMapper(simple_2d, eps=0.5, method="not_a_method")
+
 
 class TestBallMapperConstruction:
     def test_basic_construction(self, simple_2d):
