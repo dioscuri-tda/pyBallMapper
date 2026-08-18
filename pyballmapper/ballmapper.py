@@ -712,7 +712,7 @@ def _find_landmarks(
         case _:
             raise ValueError(
                 f"unknown method {method!r}; expected one of "
-                "None, 'greedy', 'nearest', 'adaptive'"
+                "None, 'greedy', 'nearest', 'adaptive', 'balltree'"
             )
 
     return landmarks, points_covered_by_landmarks, eps_dict
