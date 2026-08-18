@@ -16,6 +16,13 @@ from numba import njit
 from scipy.spatial.distance import cdist
 from tqdm.auto import tqdm
 
+ADAPTIVE_ETA = 0.7
+"""Default shrink factor for the ``"adaptive"`` landmark method.
+
+Defined once so that the signature of :func:`_find_landmarks_adaptive` and the
+dispatch in :func:`_find_landmarks` cannot drift apart.
+"""
+
 
 @njit
 def _euclid_distance(x: np.ndarray, y: np.ndarray) -> float:
@@ -241,7 +248,7 @@ def _find_landmarks_adaptive(
     X: npt.NDArray,
     eps: float,
     max_size: int,
-    eta: float = 0.7,
+    eta: float = ADAPTIVE_ETA,
     orbits: Any = None,
     metric: Any = None,
     order: Any = None,
@@ -516,7 +523,7 @@ def _find_landmarks(
                 X=X,
                 eps=eps,
                 max_size=kwargs["max_size"],
-                eta=kwargs["eta"],
+                eta=kwargs.get("eta", ADAPTIVE_ETA),
                 orbits=orbits,
                 metric=metric,
                 order=order,
@@ -531,6 +538,11 @@ def _find_landmarks(
         case None:
             landmarks, points_covered_by_landmarks, eps_dict = _find_landmarks_greedy(
                 X, eps, orbits, metric, order, verbose
+            )
+        case _:
+            raise ValueError(
+                f"unknown method {method!r}; expected one of "
+                "None, 'greedy', 'nearest', 'adaptive'"
             )
 
     return landmarks, points_covered_by_landmarks, eps_dict
