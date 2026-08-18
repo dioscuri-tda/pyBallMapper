@@ -17,4 +17,25 @@ bm = BallMapper(X = my_pointcloud,    # the pointcloud, as a array-like of shape
                 eps = 4.669)          # the radius of the covering balls
 ```
 
+### Faster construction on large datasets ⚡
+
+The default landmark search compares every point against every landmark, which
+scales as `O(n_samples**2)` and becomes slow for large point clouds. For
+Euclidean data you can instead pass `method="balltree"`, which uses a
+[scikit-learn `BallTree`](https://scikit-learn.org/stable/modules/generated/sklearn.neighbors.BallTree.html)
+to select landmarks and compute coverage, and a sparse matrix product to find
+the edges:
+
+```
+from pyballmapper import BallMapper
+bm = BallMapper(X = my_pointcloud,
+                eps = 4.669,
+                method = "balltree")   # fast, euclidean-only
+```
+
+`method="balltree"` produces **the same graph** (identical landmarks and edges)
+as the default method — it is only faster. It supports the Euclidean metric
+without orbits; for any other metric, or when `orbits` are given, it
+automatically falls back to the default greedy search.
+
 For more info check out the [example notebooks](https://github.com/dgurnari/pyBallMapper/tree/main/notebooks) or the [documentation](https://pyballmapper.readthedocs.io).

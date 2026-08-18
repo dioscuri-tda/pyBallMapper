@@ -13,7 +13,9 @@ import pandas as pd
 from matplotlib import colormaps as cm
 from matplotlib.colors import Colormap
 from numba import njit
+from scipy.sparse import csr_matrix
 from scipy.spatial.distance import cdist
+from sklearn.neighbors import BallTree
 from tqdm.auto import tqdm
 
 ADAPTIVE_ETA = 0.7
@@ -242,6 +244,166 @@ def _find_landmarks_greedy(
                 points_covered_by_landmarks[idx_v].append(idx_p)
 
     return landmarks, points_covered_by_landmarks, None
+
+
+def _find_landmarks_balltree(
+    X: npt.NDArray,
+    eps: float,
+    orbits: Any = None,
+    metric: Any = None,
+    order: Any = None,
+    verbose: bool | str = False,
+) -> tuple[dict[int, int], dict[int, list[int]], None]:
+    """Finds the landmark points using a scikit-learn ``BallTree``.
+
+    Fast, drop-in replacement for :func:`_find_landmarks_greedy` for Euclidean \
+    data. It follows the exact same greedy criterion -- a point is skipped iff \
+    it already lies inside the ``eps``-ball of a previously selected landmark -- \
+    so it selects the **same landmarks in the same order** as the greedy method \
+    and therefore yields an identical BallMapper graph. The speedup comes from \
+    replacing the O(n_samples**2 * n_features) all-pairs distance computations \
+    of the reference greedy search with O(n_samples * log n_samples) spatial \
+    queries on a ``BallTree``.
+
+    Only the Euclidean metric is supported, and orbits are not handled: for any \
+    other ``metric`` or when ``orbits`` are given this function warns and falls \
+    back to :func:`_find_landmarks_greedy`.
+
+    Parameters
+    ----------
+    X : {array-like} of shape (n_samples, n_features)
+        Data vectors.
+
+    eps : float
+        The radius of the balls.
+
+    orbits : list of length n_samples, default=None
+        Not supported by this method; if given, falls back to the greedy method.
+
+    metric : str, default='euclidean'
+        Only 'euclidean' is supported; other values fall back to the greedy \
+        method.
+
+    order: array-like of shape (n_samples, ), default=None
+        The order in which to consider the data points in the greedy search for \
+        landmarks. By default uses the order of X.
+
+    verbose: bool or string, default=False
+        Enable verbose output.
+
+    Returns
+    ----------
+    landmarks: dict
+        ids of the landmark points
+
+    points_covered_by_landmarks: dict
+        keys: landmarks ids
+        values: list of ids of the points covered by the corresponding ball
+    """
+
+    if (metric is not None and metric != "euclidean") or orbits is not None:
+        warnings.warn(
+            "Warning........... the 'balltree' method only supports the euclidean "
+            "metric without orbits, falling back to the greedy method"
+        )
+        return _find_landmarks_greedy(X, eps, orbits, metric, order, verbose)
+
+    n_points = X.shape[0]
+
+    if order is None:
+        order = range(n_points)
+
+    # build the spatial index once
+    tree = BallTree(X, metric="euclidean")
+
+    if verbose:
+        print("Finding vertices...")
+
+    # greedy landmark selection using a boolean `covered` mask:
+    # a candidate is a new landmark iff it is not yet covered by a previous ball
+    covered = np.zeros(n_points, dtype=bool)
+    landmarks: dict[int, int] = {}  # dict of points {idx_v: idx_p, ... }
+    centers_counter = 0
+
+    for idx_p in order:
+        if covered[idx_p]:
+            continue
+        landmarks[centers_counter] = int(idx_p)
+        centers_counter += 1
+        # mark every point inside the new ball as covered in one batch query
+        in_ball = tree.query_radius(X[idx_p : idx_p + 1], r=eps)[0]
+        covered[in_ball] = True
+
+    if verbose:
+        print("{} vertices found.".format(centers_counter))
+        print("Computing points_covered_by_landmarks...")
+
+    # batched coverage query for every landmark at once
+    points_covered_by_landmarks: dict[int, list[int]] = {}
+    if centers_counter > 0:
+        landmark_ids = list(landmarks.values())
+        coverage_arrays = tree.query_radius(X[landmark_ids], r=eps)
+        for idx_v in landmarks:
+            # sort so the coverage lists match the greedy method's natural order
+            points_covered_by_landmarks[idx_v] = np.sort(
+                coverage_arrays[idx_v]
+            ).tolist()
+
+    return landmarks, points_covered_by_landmarks, None
+
+
+def _find_edges_from_coverage(
+    points_covered_by_landmarks: dict[int, list[int]], n_points: int
+) -> list[list[int]]:
+    """Finds the BallMapper edges from the coverage via a sparse matrix product.
+
+    Builds the incidence matrix ``M`` in {0, 1}^(n_landmarks x n_points) where \
+    ``M[v, p] = 1`` iff point ``p`` lies in landmark ``v``'s ball. The product \
+    ``S = M @ M.T`` is a sparse (n_landmarks x n_landmarks) matrix whose \
+    ``(v, u)`` entry equals the number of points shared by balls ``v`` and \
+    ``u``; its nonzero off-diagonal entries are exactly the BallMapper edges \
+    (two balls that share at least one point). This replaces the \
+    O(n_landmarks**2) Python ``set`` intersection double loop with a single \
+    sparse matrix product and is bit-for-bit identical to it.
+
+    Parameters
+    ----------
+    points_covered_by_landmarks: dict
+        keys: landmarks ids (assumed to be 0, 1, ..., n_landmarks - 1)
+        values: list of ids of the points covered by the corresponding ball
+
+    n_points: int
+        the number of data points
+
+    Returns
+    ----------
+    edges: list of [idx_v, idx_u] with idx_v < idx_u
+    """
+
+    n_landmarks = len(points_covered_by_landmarks)
+    if n_landmarks == 0:
+        return []
+
+    coverage_arrays = [
+        np.asarray(points_covered_by_landmarks[v], dtype=np.int64)
+        for v in range(n_landmarks)
+    ]
+    sizes = np.fromiter(
+        (len(arr) for arr in coverage_arrays), dtype=np.int64, count=n_landmarks
+    )
+    indptr = np.empty(n_landmarks + 1, dtype=np.int64)
+    indptr[0] = 0
+    np.cumsum(sizes, out=indptr[1:])
+    indices = np.concatenate(coverage_arrays)
+    data = np.ones(int(indptr[-1]), dtype=np.int32)
+
+    incidence = csr_matrix((data, indices, indptr), shape=(n_landmarks, n_points))
+    overlap = (incidence @ incidence.T).tocoo()
+    mask = overlap.row < overlap.col
+    return [
+        [int(idx_v), int(idx_u)]
+        for idx_v, idx_u in zip(overlap.row[mask], overlap.col[mask])
+    ]
 
 
 def _find_landmarks_adaptive(
@@ -493,6 +655,8 @@ def _find_landmarks(
         - "nearest": deterministic method selecting the uncovered point nearest to any existing ball
         - "adaptive": random method adjusting the radius of each ball to ensure a maximum number of points per ball
         - "greedy": random method selecting the first uncovered point in the considered order
+        - "balltree": fast BallTree-based version of "greedy" (euclidean metric \
+            only) that produces an identical BallMapper graph
 
     verbose: bool or string, default=False
         Enable verbose output. Set it to 'tqdm' to show a tqdm progressbar.
@@ -534,6 +698,12 @@ def _find_landmarks(
             landmarks, points_covered_by_landmarks, eps_dict = _find_landmarks_greedy(
                 X, eps, orbits, metric, order, verbose
             )
+        # "balltree" is a fast BallTree-based version of the greedy method
+        # (euclidean metric only) that yields an identical BallMapper graph
+        case "balltree":
+            landmarks, points_covered_by_landmarks, eps_dict = _find_landmarks_balltree(
+                X, eps, orbits, metric, order, verbose
+            )
         # "greedy" method is a default one when a method is not specified
         case None:
             landmarks, points_covered_by_landmarks, eps_dict = _find_landmarks_greedy(
@@ -542,7 +712,7 @@ def _find_landmarks(
         case _:
             raise ValueError(
                 f"unknown method {method!r}; expected one of "
-                "None, 'greedy', 'nearest', 'adaptive'"
+                "None, 'greedy', 'nearest', 'adaptive', 'balltree'"
             )
 
     return landmarks, points_covered_by_landmarks, eps_dict
@@ -595,6 +765,18 @@ class BallMapper:
             search for landmarks. Different ordering might lead to different \
             BallMapper graphs.
             By defaults uses the order of X.
+
+        method: string, default=None
+            The method used to select the landmark points. Options are:
+            - None or "greedy": selects the first uncovered point in the \
+            considered order (default).
+            - "balltree": a fast BallTree-based version of the greedy method \
+            (euclidean metric, no orbits) that produces an identical BallMapper \
+            graph, recommended for large datasets.
+            - "nearest": deterministic method selecting the uncovered point \
+            nearest to any existing ball.
+            - "adaptive": adjusts the radius of each ball to enforce a maximum \
+            number of points per ball (requires the `max_size` keyword).
 
         verbose: bool or string, default=False
             Enable verbose output. Set it to 'tqdm' to show a tqdm progressbar.
@@ -680,20 +862,26 @@ class BallMapper:
         if verbose:
             print("Running BallMapper ")
             print("Finding edges...")
-        edges = []  # list of edges [[idx_v, idx_u], ...]
-        for i, idx_v in tqdm(
-            enumerate(list(landmarks.keys())[:-1]), disable=not (verbose == "tqdm")
-        ):
-            for idx_u in list(landmarks.keys())[i + 1 :]:
-                if (
-                    len(
-                        set(self.points_covered_by_landmarks[idx_v]).intersection(
-                            self.points_covered_by_landmarks[idx_u]
+        edges: list[list[int]] = []  # list of edges [[idx_v, idx_u], ...]
+        if method == "balltree":
+            # fast sparse edge finding, consistent with the balltree landmarks
+            edges = _find_edges_from_coverage(
+                self.points_covered_by_landmarks, n_points
+            )
+        else:
+            for i, idx_v in tqdm(
+                enumerate(list(landmarks.keys())[:-1]), disable=not (verbose == "tqdm")
+            ):
+                for idx_u in list(landmarks.keys())[i + 1 :]:
+                    if (
+                        len(
+                            set(self.points_covered_by_landmarks[idx_v]).intersection(
+                                self.points_covered_by_landmarks[idx_u]
+                            )
                         )
-                    )
-                    != 0
-                ):
-                    edges.append([idx_v, idx_u])
+                        != 0
+                    ):
+                        edges.append([idx_v, idx_u])
 
         # create Ball Mapper graph
         if verbose:
