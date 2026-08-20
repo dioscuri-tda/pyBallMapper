@@ -29,10 +29,11 @@ This generates two files in the current directory:
 | `--d INT` | 100 | Number of features for synthetic data |
 | `--ns INT ...` | `500 1000 2000 4000 8000` | Dataset sizes for N-scaling test |
 | `--eps-list FLOAT ...` | auto-calibrated | Eps values for eps-scaling test |
-| `--methods STR ...` | `greedy` | Landmark methods to benchmark (`greedy`, `nearest`, `adaptive`) |
+| `--methods STR ...` | `greedy` | Landmark methods to benchmark (`greedy`, `nearest`, `adaptive`, `balltree`, `gpu`) |
 | `--scaling-eps FLOAT` | auto-calibrated | Fixed eps for the N-scaling test |
 | `--scaling-n INT` | 2000 | Fixed N for the eps-scaling test |
 | `--reps INT` | 3 | Repetitions per timing (mean +/- std is reported) |
+| `--skip-over FLOAT` | no limit | Drop a method from the remaining, slower cells once one build exceeds this many seconds |
 | `--out DIR` | `.` | Output directory |
 
 ## What is measured
@@ -41,7 +42,7 @@ The benchmark runs two tests:
 
 **Test 1 — N-scaling** builds BallMapper on datasets of increasing size at a fixed eps. This shows how construction time and memory grow with `N`.
 
-**Test 2 — eps-scaling** builds BallMapper with decreasing eps at a fixed `N`. Smaller eps means more landmarks and more edges, so both time and memory increase.
+**Test 2 — eps-scaling** builds BallMapper with decreasing eps at a fixed `N`. Smaller eps means more landmarks and more edges, so both time and memory increase. The values are therefore walked from the largest eps down, so that `--skip-over` only ever discards cells that would have been slower still.
 
 Both tests report:
 
@@ -50,6 +51,11 @@ Both tests report:
 - **Number of landmarks** (`L`)
 - **Number of edges** (`E`)
 - **Raw per-run values** in the JSON output
+
+The first build of each method is run once and discarded before timing starts.
+This matters for `method="gpu"`, where the first CUDA call of a process pays a
+fixed several-second cost to create the device context that has nothing to do
+with the algorithm.
 
 ## Examples
 
@@ -67,6 +73,22 @@ Use your own data:
 ```bash
 uv run python benchmarks/benchmark_ballmapper.py --data my_data.npy
 ```
+
+Compare the fast methods against the reference on large data. `--skip-over`
+keeps this finite: the default `greedy` method is quadratic and would otherwise
+still be running long after the others have finished:
+
+```bash
+uv run python benchmarks/benchmark_ballmapper.py \
+    --methods greedy balltree gpu \
+    --ns 5000 20000 100000 500000 \
+    --reps 5 \
+    --skip-over 300
+```
+
+Anything left out this way is listed in the report, so a missing point in a
+plot is never silent. See [GPU landmark selection](gpu.md) for what `gpu`
+requires.
 
 Test the adaptive method with a fixed eps:
 

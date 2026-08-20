@@ -21,6 +21,7 @@ Usage
 from __future__ import annotations
 
 import argparse
+import html as _html
 import json
 import os
 import socket
@@ -65,14 +66,28 @@ def _graphs_identical(bm_a: BallMapper, bm_b: BallMapper) -> bool:
 
 
 def _timed_build(
-    X: np.ndarray, eps: float, method: str | None, reps: int
+    X: np.ndarray,
+    eps: float,
+    method: str | None,
+    reps: int,
+    warmup: bool = False,
 ) -> tuple[list[float], list[float], bool, BallMapper]:
     """Build BallMapper *reps* times.
 
     Returns (all_times_s, all_peak_rss_mb, deterministic, last_object).
     Determinism is verified by comparing the first and last build.
     Peak RSS is measured via ``tracemalloc``.
+
+    With *warmup*, one build is run and discarded first. Only the ``"gpu"``
+    method asks for this: the first CUDA call of a process pays for creating the
+    device context, a fixed cost of several seconds that has nothing to do with
+    the algorithm and would otherwise land entirely on the first timed repeat.
+    The CPU methods have no such cost, and paying an extra build for them would
+    be pure waste -- so they do not.
     """
+    if warmup:
+        BallMapper(X=X, eps=eps, method=method)
+
     ts: list[float] = []
     peak_mbs: list[float] = []
     first_obj: BallMapper | None = None
@@ -102,15 +117,26 @@ def run_n_scaling(
     reps: int,
     d: int,
     log: Callable[..., Any] = print,
+    skip_over: float | None = None,
+    skipped: list[str] | None = None,
 ) -> list[dict]:
-    """For each method, build BallMapper on datasets of increasing N."""
+    """For each method, build BallMapper on datasets of increasing N.
+
+    With *skip_over*, a method is dropped from the remaining -- larger, hence
+    slower -- sizes as soon as one of its builds exceeds that many seconds.
+    Without it a run that includes the default greedy method is effectively
+    unbounded past a few tens of thousands of points. Every drop is logged and
+    appended to *skipped* so that the report can say what was left out.
+    """
     rows: list[dict] = []
     for method in methods:
         label = method or "greedy"
         log(f"  method={label}  eps={eps:.4f}", flush=True)
-        for n in ns:
+        for n in sorted(ns):
             X = gs.make_highd(n, d=d, seed=n)
-            all_times, all_mems, deterministic, bm = _timed_build(X, eps, method, reps)
+            all_times, all_mems, deterministic, bm = _timed_build(
+                X, eps, method, reps, warmup=(method == "gpu" and n == min(ns))
+            )
             time_arr = np.array(all_times)
             mem_arr = np.array(all_mems)
             row = {
@@ -134,6 +160,17 @@ def run_n_scaling(
                 f"mem={row['peak_rss_mean_mb']:.1f}+/-{row['peak_rss_std_mb']:.1f}MB  "
                 f"det={deterministic}"
             )
+            if skip_over is not None and max(all_times) > skip_over:
+                remaining = [k for k in sorted(ns) if k > n]
+                if remaining:
+                    note = (
+                        f"{label}: skipped N > {n:,} "
+                        f"(a build took {max(all_times):.3g}s > {skip_over:g}s)"
+                    )
+                    log(f"    {note}")
+                    if skipped is not None:
+                        skipped.append(note)
+                break
     return rows
 
 
@@ -145,15 +182,26 @@ def run_eps_scaling(
     reps: int,
     d: int,
     log: Callable[..., Any] = print,
+    skip_over: float | None = None,
+    skipped: list[str] | None = None,
 ) -> list[dict]:
-    """For each method, build BallMapper with decreasing eps at fixed N."""
+    """For each method, build BallMapper with decreasing eps at fixed N.
+
+    A smaller eps means more landmarks and more work, so the values are walked
+    from the largest down; that way *skip_over* -- which drops a method from
+    everything still to come once one of its builds exceeds that many seconds
+    -- only ever discards cells that would have been slower still.
+    """
     rows: list[dict] = []
     X = gs.make_highd(n, d=d, seed=42)
+    order = sorted(eps_list, reverse=True)
     for method in methods:
         label = method or "greedy"
         log(f"  method={label}  N={n}", flush=True)
-        for eps in eps_list:
-            all_times, all_mems, deterministic, bm = _timed_build(X, eps, method, reps)
+        for eps in order:
+            all_times, all_mems, deterministic, bm = _timed_build(
+                X, eps, method, reps, warmup=(method == "gpu" and eps == order[0])
+            )
             time_arr = np.array(all_times)
             mem_arr = np.array(all_mems)
             row = {
@@ -177,6 +225,21 @@ def run_eps_scaling(
                 f"mem={row['peak_rss_mean_mb']:.1f}+/-{row['peak_rss_std_mb']:.1f}MB  "
                 f"det={deterministic}"
             )
+            if skip_over is not None and max(all_times) > skip_over:
+                remaining = [e for e in order if e < eps]
+                if remaining:
+                    note = (
+                        f"{label}: skipped eps < {eps:.4f} "
+                        f"(a build took {max(all_times):.3g}s > {skip_over:g}s)"
+                    )
+                    log(f"    {note}")
+                    if skipped is not None:
+                        skipped.append(note)
+                break
+    # report the cells in the order the user asked for them -- by method as
+    # given on the command line, then by eps as given, not alphabetically
+    method_order = {m or "greedy": i for i, m in enumerate(methods)}
+    rows.sort(key=lambda r: (method_order[r["method"]], eps_list.index(r["eps"])))
     return rows
 
 
@@ -319,6 +382,24 @@ def build_report(
         ),
     )
 
+    if meta.get("gpu_fell_back"):
+        rep.callout(
+            "The <code>gpu</code> rows below are <b>not</b> device results: "
+            f'{_html.escape(meta["gpu_fell_back"])}, so <code>method="gpu"</code> '
+            "fell back to <code>balltree</code>.",
+            kind="warn",
+        )
+
+    if meta.get("skipped"):
+        rep.callout(
+            "Some cells were <b>not measured</b>: a method is dropped from the "
+            f"remaining, slower cells once one build exceeds "
+            f"<code>{meta['skip_over']:g}s</code>.<ul>"
+            + "".join(f"<li>{_html.escape(note)}</li>" for note in meta["skipped"])
+            + "</ul>",
+            kind="warn",
+        )
+
     # ── Test 1: N-scaling ──
     rep.h2("Test 1 — N-scaling at fixed eps")
     rep.p(
@@ -429,7 +510,10 @@ def main() -> None:
         "--methods",
         nargs="+",
         default=["greedy"],
-        help="landmark methods to benchmark (default: greedy)",
+        help=(
+            "landmark methods to benchmark: greedy, nearest, adaptive, "
+            "balltree, gpu (default: greedy)"
+        ),
     )
     ap.add_argument(
         "--scaling-eps",
@@ -444,6 +528,15 @@ def main() -> None:
         help="N for eps-scaling test (default: 2000)",
     )
     ap.add_argument("--reps", type=int, default=3, help="repetitions per timing")
+    ap.add_argument(
+        "--skip-over",
+        type=float,
+        default=None,
+        help=(
+            "drop a method from the remaining, slower cells once one of its "
+            "builds exceeds this many seconds (default: no limit)"
+        ),
+    )
     ap.add_argument("--out", default=".", help="output directory")
     args = ap.parse_args()
 
@@ -473,6 +566,23 @@ def main() -> None:
 
     methods = args.methods
 
+    # a gpu method with no CUDA behind it falls back to balltree and would
+    # otherwise be tabulated and plotted as if it were the device result
+    gpu_note = None
+    if "gpu" in methods:
+        try:
+            import torch
+
+            if not torch.cuda.is_available():
+                gpu_note = "pytorch is installed but no CUDA device is available"
+        except ImportError:
+            gpu_note = "pytorch is not installed"
+        if gpu_note:
+            print(
+                f"WARNING: method 'gpu' will fall back to 'balltree' -- {gpu_note}",
+                flush=True,
+            )
+
     print(
         f"benchmark_ballmapper | host={socket.gethostname().split('.')[0]} "
         f"reps={args.reps} d={d} data={data_src}",
@@ -484,11 +594,29 @@ def main() -> None:
         flush=True,
     )
 
+    skipped: list[str] = []
+
     print("\n=== Test 1: N-scaling ===", flush=True)
-    n_rows = run_n_scaling(methods, args.ns, scaling_eps, args.reps, d)
+    n_rows = run_n_scaling(
+        methods,
+        args.ns,
+        scaling_eps,
+        args.reps,
+        d,
+        skip_over=args.skip_over,
+        skipped=skipped,
+    )
 
     print("\n=== Test 2: eps-scaling ===", flush=True)
-    eps_rows = run_eps_scaling(methods, eps_list, scaling_n, args.reps, d)
+    eps_rows = run_eps_scaling(
+        methods,
+        eps_list,
+        scaling_n,
+        args.reps,
+        d,
+        skip_over=args.skip_over,
+        skipped=skipped,
+    )
 
     meta = {
         "host": socket.gethostname().split(".")[0],
@@ -498,6 +626,9 @@ def main() -> None:
         "methods": methods,
         "scaling_eps": scaling_eps,
         "scaling_n": scaling_n,
+        "skip_over": args.skip_over,
+        "skipped": skipped,
+        "gpu_fell_back": gpu_note,
         "timestamp": time.strftime("%Y-%m-%d %H:%M"),
     }
 
