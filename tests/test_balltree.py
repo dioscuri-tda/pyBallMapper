@@ -98,6 +98,52 @@ class TestFindLandmarksBallTree:
         assert covered == set(range(len(simple_2d)))
 
 
+class TestBallTreeQueryCount:
+    """One radius query per landmark, not two.
+
+    The query that marks a new ball's points as covered already returns the
+    whole ball, so re-querying every landmark afterwards to build the coverage
+    is pure repetition -- and the repeated pass is the same size as the first,
+    so it doubles the tree work.
+    """
+
+    @staticmethod
+    def _count_queries(X: np.ndarray, eps: float) -> tuple[int, int]:
+        """Returns (radius queries issued, landmarks found)."""
+        import sklearn.neighbors
+
+        calls = 0
+        original = sklearn.neighbors.BallTree.query_radius
+
+        def counting(self, target, r, **kwargs):
+            nonlocal calls
+            calls += len(np.atleast_2d(target))
+            return original(self, target, r, **kwargs)
+
+        sklearn.neighbors.BallTree.query_radius = counting
+        try:
+            landmarks, _, _ = _find_landmarks_balltree(X, eps=eps, metric="euclidean")
+        finally:
+            sklearn.neighbors.BallTree.query_radius = original
+        return calls, len(landmarks)
+
+    @pytest.mark.parametrize("eps", [0.3, 0.5, 0.8])
+    def test_one_query_per_landmark(self, eps: float):
+        queries, n_landmarks = self._count_queries(_blobs(), eps)
+        assert queries == n_landmarks
+
+    def test_still_matches_greedy_exactly(self):
+        """The property the halving must not cost: the same graph as greedy."""
+        X = _blobs()
+        order = range(len(X))
+        lg, cg, _ = _find_landmarks_greedy(X, eps=0.5, metric="euclidean", order=order)
+        lb, cb, _ = _find_landmarks_balltree(
+            X, eps=0.5, metric="euclidean", order=order
+        )
+        assert lb == lg
+        assert cb == {k: sorted(v) for k, v in cg.items()}
+
+
 class TestFindEdgesFromCoverage:
     def test_matches_reference_loop(self):
         X = _blobs()

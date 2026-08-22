@@ -265,6 +265,11 @@ def _find_landmarks_balltree(
     of the reference greedy search with O(n_samples * log n_samples) spatial \
     queries on a ``BallTree``.
 
+    Each ball is queried once. The radius query that marks a new landmark's \
+    points as covered already returns the whole ball -- ``query_radius`` does not \
+    care whether a point was covered before -- so keeping that result is the \
+    coverage, and no second pass over the landmarks is needed.
+
     Only the Euclidean metric is supported, and orbits are not handled: for any \
     other ``metric`` or when ``orbits`` are given this function warns and falls \
     back to :func:`_find_landmarks_greedy`.
@@ -320,34 +325,30 @@ def _find_landmarks_balltree(
         print("Finding vertices...")
 
     # greedy landmark selection using a boolean `covered` mask:
-    # a candidate is a new landmark iff it is not yet covered by a previous ball
+    # a candidate is a new landmark iff it is not yet covered by a previous ball.
+    #
+    # The radius query that marks the new ball's points as covered returns every
+    # point within eps of the landmark, whether or not it was already covered --
+    # which is the ball, complete. So it is kept here rather than re-queried for
+    # all the landmarks afterwards, which halves the number of tree queries from
+    # 2 * n_landmarks to n_landmarks.
     covered = np.zeros(n_points, dtype=bool)
     landmarks: dict[int, int] = {}  # dict of points {idx_v: idx_p, ... }
+    points_covered_by_landmarks: dict[int, list[int]] = {}
     centers_counter = 0
 
     for idx_p in order:
         if covered[idx_p]:
             continue
-        landmarks[centers_counter] = int(idx_p)
-        centers_counter += 1
-        # mark every point inside the new ball as covered in one batch query
         in_ball = tree.query_radius(X[idx_p : idx_p + 1], r=eps)[0]
+        landmarks[centers_counter] = int(idx_p)
+        # sort so the coverage lists match the greedy method's natural order
+        points_covered_by_landmarks[centers_counter] = np.sort(in_ball).tolist()
+        centers_counter += 1
         covered[in_ball] = True
 
     if verbose:
         print("{} vertices found.".format(centers_counter))
-        print("Computing points_covered_by_landmarks...")
-
-    # batched coverage query for every landmark at once
-    points_covered_by_landmarks: dict[int, list[int]] = {}
-    if centers_counter > 0:
-        landmark_ids = list(landmarks.values())
-        coverage_arrays = tree.query_radius(X[landmark_ids], r=eps)
-        for idx_v in landmarks:
-            # sort so the coverage lists match the greedy method's natural order
-            points_covered_by_landmarks[idx_v] = np.sort(
-                coverage_arrays[idx_v]
-            ).tolist()
 
     return landmarks, points_covered_by_landmarks, None
 
