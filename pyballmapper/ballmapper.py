@@ -429,11 +429,14 @@ def _gpu_wavefront_mis(adjacency_lower: Any) -> Any:
     The sequential greedy rule -- walk the points in order, keep one iff it is \
     not already covered -- is exactly the lexicographically-first maximal \
     independent set of the ``eps``-proximity graph, which is what makes it \
-    inherently serial. This routine computes *a* maximal independent set of the \
-    same graph in parallel rounds instead: in each round every still-active \
-    vertex that has no active neighbour of strictly smaller index is selected \
-    simultaneously, then the selected vertices and their neighbours leave the \
-    active set.
+    inherently serial. This routine computes that same set in parallel rounds \
+    instead: in each round every still-active vertex that has no active \
+    neighbour of strictly smaller index is selected simultaneously, then the \
+    selected vertices and their neighbours leave the active set. In every round \
+    the roots are exactly the vertices the sequential greedy pass would accept \
+    next, so the fixed point is the lexicographically-first maximal independent \
+    set, not merely any one; ``TestWavefrontMis`` pins this against a \
+    sequential reference.
 
     Two properties hold by construction:
 
@@ -498,9 +501,21 @@ def _gpu_centred_float32(
 ) -> npt.NDArray[np.float32]:
     """Mean-centres ``X[positions]`` in float64 and returns it as float32.
 
-    The order matters and is the whole point of doing this on the host: the     float32 cast is the lossy, irreversible step, quantising each coordinate     onto the float32 grid at the data's own offset magnitude, so centring     afterwards could not recover what it threw away. Centring first spends the     full float32 relative precision on the spread, which is what ``eps`` is     measured against.
+    The order matters and is the whole point of doing this on the host: the
+    float32 cast is the lossy, irreversible step, quantising each coordinate
+    onto the float32 grid at the data's own offset magnitude, so centring
+    afterwards could not recover what it threw away. Centring first spends the
+    full float32 relative precision on the spread, which is what ``eps`` is
+    measured against.
 
-    Done naively that means a full ``(n_samples, n_features)`` float64     temporary -- 800 MB at a million points in a hundred dimensions, and the     memory traffic to match. Instead the mean is accumulated in float64     straight off ``X``, and the rows are then centred and cast a block at a     time through **one reusable buffer**, so the float64 working set is a few     tens of megabytes whatever the input size. The output is bit-for-bit what     the naive version produces.
+    Done naively that means a full ``(n_samples, n_features)`` float64
+    temporary -- 800 MB at a million points in a hundred dimensions, and
+    the memory traffic to match. With the default ordering the rows are
+    centred and cast a block at a time through **one reusable buffer**,
+    so the float64 working set stays a few tens of megabytes whatever
+    the input size. A custom ``order`` gathers one full permuted copy
+    to compute the mean instead -- one ``n x d`` temporary, paid once.
+    The output is bit-for-bit what the naive version produces.
     """
     n_points, n_features = X.shape[0], X.shape[1]
     if n_points == 0:
@@ -1330,8 +1345,10 @@ def _find_landmarks(
         - "greedy": random method selecting the first uncovered point in the considered order
         - "balltree": fast BallTree-based version of "greedy" (euclidean metric \
             only) that produces an identical BallMapper graph
-        - "gpu": CUDA version (euclidean metric only, requires pytorch) that \
-            produces a different but equally valid maximal eps-net
+        - "gpu": CUDA version (euclidean metric only, requires pytorch). \
+            Expected to reproduce the greedy graph -- measured identical -- but \
+            distances are resolved in float32, so a point within rounding of the \
+            eps boundary can yield a different, still valid maximal eps-net
 
     verbose: bool or string, default=False
         Enable verbose output. Set it to 'tqdm' to show a tqdm progressbar.
@@ -1379,8 +1396,8 @@ def _find_landmarks(
             landmarks, points_covered_by_landmarks, eps_dict = _find_landmarks_balltree(
                 X, eps, orbits, metric, order, verbose
             )
-        # "gpu" runs the landmark search on a CUDA device; it yields a valid
-        # but different maximal eps-net, not the greedy one
+        # "gpu" runs the landmark search on a CUDA device; it is expected to
+        # reproduce the greedy graph, up to float32 rounding at the eps boundary
         case "gpu":
             landmarks, points_covered_by_landmarks, eps_dict = _find_landmarks_gpu(
                 X,
@@ -1463,11 +1480,13 @@ class BallMapper:
             (euclidean metric, no orbits) that produces an identical BallMapper \
             graph, recommended for large datasets.
             - "gpu": runs the landmark search on a CUDA device via pytorch \
-            (euclidean metric, no orbits). It does not reproduce the greedy \
-            landmark sequence -- it returns a different, equally valid maximal \
-            eps-net -- but it is by far the fastest option on large datasets. \
-            Accepts the `device`, `chunk` and `lblk` keywords. Falls back to \
-            "balltree" when pytorch or a CUDA device is unavailable.
+            (euclidean metric, no orbits). Expected to reproduce the greedy \
+            graph -- measured identical -- but distances are resolved in \
+            float32, so a point within rounding of the eps boundary can yield \
+            a different, still valid maximal eps-net. By far the fastest \
+            option on large datasets. Accepts the `device`, `chunk` and \
+            `lblk` keywords. Falls back to "balltree" when pytorch or a CUDA \
+            device is unavailable.
             - "nearest": deterministic method selecting the uncovered point \
             nearest to any existing ball.
             - "adaptive": adjusts the radius of each ball to enforce a maximum \

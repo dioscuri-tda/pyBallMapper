@@ -1,11 +1,13 @@
 """Tests for the CUDA landmark method (``method="gpu"``).
 
-The GPU method does not reproduce the greedy landmark sequence, so -- unlike
-:mod:`tests.test_balltree` -- these tests cannot assert graph equality against a
-reference. What they assert instead is the property that actually defines a
-BallMapper cover, and which the greedy sequence is only one way of reaching: the
-landmarks are a *maximal eps-net*, meaning pairwise farther than ``eps`` apart
-(independence) and jointly covering every data point (maximality).
+The GPU method is expected to reproduce the greedy graph, but it resolves
+distances in float32, so a point within rounding of the ``eps`` boundary can
+land on the other side of it. The tests therefore assert two things: the
+property that defines any BallMapper cover -- the landmarks are a *maximal
+eps-net*, pairwise farther than ``eps`` apart (independence) and jointly
+covering every data point (maximality) -- and equality with the greedy
+reference up to that boundary rounding: identical landmarks, identical edges,
+and coverage differing only for points within float32 rounding of ``eps``.
 
 Three tiers of tests live here:
 
@@ -238,6 +240,27 @@ class TestWavefrontMis:
         keep = _gpu_wavefront_mis(self._lower_adjacency(X, 1.0)).numpy()
         assert keep.all()
 
+    @pytest.mark.parametrize("n", [1, 7, 64, 300])
+    @pytest.mark.parametrize("density", [0.05, 0.2, 0.5, 0.9])
+    def test_matches_sequential_greedy(self, n: int, density: float):
+        """The selection is the lexicographically-first MIS, not just any one.
+
+        This is what makes ``method="gpu"`` reproduce the greedy graph, so a
+        change to the round rule that breaks it must fail here.
+        """
+        import torch
+
+        from pyballmapper.ballmapper import _gpu_wavefront_mis
+
+        for seed in range(5):
+            rng = np.random.default_rng(seed)
+            lower = np.tril(rng.random((n, n)) < density, k=-1)
+            expected = np.zeros(n, dtype=bool)
+            for i in range(n):
+                expected[i] = not lower[i, :i][expected[:i]].any()
+            keep = _gpu_wavefront_mis(torch.as_tensor(lower.astype(np.float32))).numpy()
+            np.testing.assert_array_equal(keep, expected)
+
 
 @needs_cuda
 class TestFindLandmarksGpu:
@@ -248,6 +271,33 @@ class TestFindLandmarksGpu:
         X = _blobs()
         landmarks, coverage, _ = _find_landmarks_gpu(X, eps=eps, metric="euclidean")
         _assert_is_maximal_eps_net(X, eps, landmarks, coverage)
+
+    @pytest.mark.parametrize("n,d", [(400, 5), (5000, 10), (20000, 20), (20000, 100)])
+    @pytest.mark.parametrize("eps", [0.3, 0.5, 0.8])
+    def test_matches_balltree_reference(self, eps: float, n: int, d: int):
+        """The headline claim: the gpu graph equals the greedy one.
+
+        Landmarks and edges must be identical. Coverage may differ only for a
+        point whose float64 distance sits within float32 rounding of ``eps``;
+        on this data that happens for two points at ``n=20000, d=20,
+        eps=0.3``, about 1e-7 outside the ball. The large sizes matter: with
+        the float32 guard removed and TF32 forced on, ``n=400`` showed no
+        difference on either an RTX 3060 or an RTX 5060 Ti; ``n=20000`` did
+        on both, down to a different landmark count.
+        """
+        X = _blobs(n=n, d=d)
+        gpu, gpu_cov, _ = _find_landmarks_gpu(X, eps=eps, metric="euclidean")
+        ref, ref_cov, _ = _find_landmarks_balltree(X, eps=eps, metric="euclidean")
+        assert gpu == ref
+
+        def edge_set(coverage: dict[int, list[int]]) -> set[tuple[int, ...]]:
+            return {tuple(sorted(e)) for e in _find_edges_from_coverage(coverage, n)}
+
+        assert edge_set(gpu_cov) == edge_set(ref_cov)
+        for node, landmark in ref.items():
+            for p in set(gpu_cov[node]) ^ set(ref_cov[node]):
+                gap = np.linalg.norm(X[p] - X[landmark]) - eps
+                assert abs(gap) < 1e-6 * eps
 
     def test_chunked_path_matches_single_chunk(self):
         """A tiny chunk forces the streaming path; it must stay a valid net."""

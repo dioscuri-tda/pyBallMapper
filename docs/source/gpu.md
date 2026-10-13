@@ -87,9 +87,11 @@ pair whose true distance sits within a few ulps of ε the two passes can
 therefore disagree: pass 1 calls the point covered, so it never becomes a
 landmark, and pass 2 then leaves it out of that ball. Left alone, such a point
 would belong to no ball at all and would vanish from the cover without a word.
-Pass 2 therefore also tracks each point's nearest landmark, and attaches any
-point it orphaned to it — the point's true distance is within ε, which is why
-pass 1 dropped it, so this restores maximality without weakening independence.
+Any point left uncovered after pass 2 is therefore attached to its **nearest
+landmark**, found in one extra sweep over the orphans — a set that is almost
+always empty, so in practice this costs nothing. The point's true distance is
+within ε, which is why pass 1 dropped it, so this restores maximality without
+weakening independence.
 
 ## Numerics
 
