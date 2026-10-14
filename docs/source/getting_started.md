@@ -38,4 +38,31 @@ as the default method — it is only faster. It supports the Euclidean metric
 without orbits; for any other metric, or when `orbits` are given, it
 automatically falls back to the default greedy search.
 
+### Running on a GPU 🚀
+
+For very large point clouds there is also `method="gpu"`, which runs the
+landmark search on a CUDA device via [PyTorch](https://pytorch.org):
+
+```
+from pyballmapper import BallMapper
+bm = BallMapper(X = my_pointcloud,
+                eps = 4.669,
+                method = "gpu")        # CUDA, euclidean-only
+```
+
+This is not an approximation. The greedy rule is exactly the
+lexicographically-first maximal independent set of the `eps`-proximity graph,
+and the GPU method computes that same set in parallel rounds instead of one
+point at a time — so it returns **the same landmarks and the same edges** as the
+default method. Measured identical from 5,000 to 1,000,000 points. (Distances
+are resolved in `float32` there, so a point sitting within rounding of the `eps`
+boundary could in principle be classified differently; the result is then a
+different, still perfectly valid cover. `method="balltree"` is the one that
+guarantees equality.)
+
+PyTorch is not a dependency of pyBallMapper. Without it, or without a working
+CUDA device, `method="gpu"` warns and falls back to `method="balltree"`, so it
+is safe to leave in code that also runs on CPU-only machines. See
+[the GPU page](gpu.md) for details.
+
 For more info check out the [example notebooks](https://github.com/dgurnari/pyBallMapper/tree/main/notebooks) or the [documentation](https://pyballmapper.readthedocs.io).
