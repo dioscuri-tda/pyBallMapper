@@ -23,9 +23,13 @@ If PyTorch is missing, or if `torch.cuda.is_available()` is `False`, the method
 emits a warning and falls back to `method="balltree"`. It is therefore safe to
 leave `method="gpu"` in code that also has to run on CPU-only machines.
 
-Only the Euclidean metric is supported and `orbits` are not handled; for any
-other `metric`, or when `orbits` are given, the method falls back to the default
-greedy search instead.
+The Euclidean and cosine metrics are supported and `orbits` are not handled;
+for any other `metric`, or when `orbits` are given, the method falls back to the
+default greedy search instead. With `metric="cosine"` the rows are L2-normalised
+in float64 on the host — and, unlike the Euclidean case, not mean-centred, since
+a shift changes angles — and the device tests `‖x − y‖ <= sqrt(2·eps)`, which
+on unit vectors is exactly `1 - cos(x, y) <= eps`. A warning says so each time.
+Zero vectors raise a `ValueError`.
 
 The data must be finite and representable as `float32`. Input containing `NaN`,
 infinity, or a magnitude that overflows the cast is rejected with a `ValueError`

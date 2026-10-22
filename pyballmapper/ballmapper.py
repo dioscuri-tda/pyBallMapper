@@ -43,6 +43,52 @@ def _euclid_distance(x: np.ndarray, y: np.ndarray) -> float:
     return float(np.linalg.norm(x - y))
 
 
+@njit
+def _cosine_distance(x: np.ndarray, y: np.ndarray) -> float:
+    """Cosine dissimilarity ``1 - <x, y> / (||x|| ||y||)``, by its definition.
+
+    Same formula and clipping as ``scipy.spatial.distance.cosine``. The loop
+    instead of ``np.dot`` keeps it valid for integer input under numba.
+    """
+    uv = 0.0
+    uu = 0.0
+    vv = 0.0
+    for k in range(x.shape[0]):
+        uv += x[k] * y[k]
+        uu += x[k] * x[k]
+        vv += y[k] * y[k]
+    return min(max(1.0 - uv / np.sqrt(uu * vv), 0.0), 2.0)
+
+
+def _check_no_zero_rows(X: npt.NDArray) -> None:
+    """Rejects zero vectors, for which the cosine dissimilarity is undefined.
+
+    Left alone, a zero row gives NaN against every point, itself included, so
+    it becomes a landmark whose ball is empty and is itself covered by no ball.
+    """
+    squared_norms = np.einsum("ij,ij->i", X, X, dtype=np.float64)
+    zero_rows = np.flatnonzero(squared_norms == 0.0)
+    if zero_rows.size:
+        shown = ", ".join(str(int(i)) for i in zero_rows[:10])
+        more = f" and {zero_rows.size - 10} more" if zero_rows.size > 10 else ""
+        raise ValueError(
+            "metric='cosine' is undefined for zero vectors; "
+            f"rows [{shown}]{more} have zero norm. Remove them or use a "
+            "different metric."
+        )
+
+
+def _cosine_radius(eps: float) -> float:
+    """Euclidean radius on unit vectors equivalent to cosine dissimilarity eps.
+
+    For unit vectors ``||x - y||**2 = 2 - 2 <x, y> = 2 * (1 - cos(x, y))``, so
+    ``1 - cos(x, y) <= eps`` holds exactly when ``||x - y|| <= sqrt(2 * eps)``.
+    """
+    if not eps >= 0.0:
+        raise ValueError(f"eps must be non-negative, got {eps!r}")
+    return float(np.sqrt(2.0 * eps))
+
+
 def _find_landmarks_deterministic_nearest_uncovered(
     X: npt.NDArray,
     eps: float,
@@ -150,7 +196,8 @@ def _find_landmarks_greedy(
 
     metric : str, or callable, default='euclidean'
         The metric to use when calculating distance between instances in a
-        feature array.
+        feature array: 'euclidean', 'cosine' (the cosine dissimilarity
+        ``1 - cos(x, y)``), 'precomputed', or a callable.
         If metric is 'precomputed', X is assumed to be a distance matrix and
         must be square.
 
@@ -183,6 +230,10 @@ def _find_landmarks_greedy(
     distance: Callable[[Any, Any], Any]
     if metric == "euclidean":
         distance = _euclid_distance
+
+    elif metric == "cosine":
+        _check_no_zero_rows(X)
+        distance = _cosine_distance
 
     elif metric == "precomputed":
         distance = lambda x, y: X[x, y]
@@ -282,9 +333,17 @@ def _find_landmarks_balltree(
     care whether a point was covered before -- so keeping that result is the \
     coverage, and no second pass over the landmarks is needed.
 
-    Only the Euclidean metric is supported, and orbits are not handled: for any \
-    other ``metric`` or when ``orbits`` are given this function warns and falls \
-    back to :func:`_find_landmarks_greedy`.
+    The Euclidean and cosine metrics are supported, and orbits are not handled: \
+    for any other ``metric`` or when ``orbits`` are given this function warns \
+    and falls back to :func:`_find_landmarks_greedy`.
+
+    ``metric='cosine'`` is reduced to the Euclidean case without approximation. \
+    For unit vectors ``||x - y||**2 = 2 * (1 - cos(x, y))``, so the rows are \
+    L2-normalised and the tree is queried with radius ``sqrt(2 * eps)``: a point \
+    lies in a ball exactly when its cosine dissimilarity to the centre is at \
+    most ``eps``. The two tests can disagree only through floating-point \
+    rounding, for a point within about 1e-15 of the ``eps`` boundary. A warning \
+    reports this each time it is used. Zero vectors raise ``ValueError``.
 
     Parameters
     ----------
@@ -298,8 +357,7 @@ def _find_landmarks_balltree(
         Not supported by this method; if given, falls back to the greedy method.
 
     metric : str, default='euclidean'
-        Only 'euclidean' is supported; other values fall back to the greedy \
-        method.
+        'euclidean' or 'cosine'; other values fall back to the greedy method.
 
     order: array-like of shape (n_samples, ), default=None
         The order in which to consider the data points in the greedy search for \
@@ -318,10 +376,12 @@ def _find_landmarks_balltree(
         values: list of ids of the points covered by the corresponding ball
     """
 
-    if (metric is not None and metric != "euclidean") or orbits is not None:
+    # callables are never handed to the BallTree: its pruning assumes the
+    # triangle inequality, which non-metrics such as cosine dissimilarity violate
+    if metric not in (None, "euclidean", "cosine") or orbits is not None:
         warnings.warn(
             "Warning........... the 'balltree' method only supports the euclidean "
-            "metric without orbits, falling back to the greedy method"
+            "and cosine metrics without orbits, falling back to the greedy method"
         )
         return _find_landmarks_greedy(X, eps, orbits, metric, order, verbose)
 
@@ -329,6 +389,20 @@ def _find_landmarks_balltree(
 
     if order is None:
         order = range(n_points)
+
+    radius = eps
+    if metric == "cosine":
+        radius = _cosine_radius(eps)
+        _check_no_zero_rows(X)
+        X = X / np.linalg.norm(X, axis=1, keepdims=True)
+        warnings.warn(
+            "metric='cosine', method='balltree': rows were L2-normalised and the "
+            "test 1 - cos(x, y) <= eps was evaluated as the equivalent Euclidean "
+            f"test ||x/|x| - y/|y||| <= sqrt(2*eps) = {radius:.6g}. The two tests "
+            "are mathematically identical; only points within float64 rounding "
+            "(~1e-15) of the eps boundary may be classified differently from "
+            "method='greedy'."
+        )
 
     # build the spatial index once
     tree = BallTree(X, metric="euclidean")
@@ -352,7 +426,7 @@ def _find_landmarks_balltree(
     for idx_p in order:
         if covered[idx_p]:
             continue
-        in_ball = tree.query_radius(X[idx_p : idx_p + 1], r=eps)[0]
+        in_ball = tree.query_radius(X[idx_p : idx_p + 1], r=radius)[0]
         landmarks[centers_counter] = int(idx_p)
         # sort so the coverage lists match the greedy method's natural order
         points_covered_by_landmarks[centers_counter] = np.sort(in_ball).tolist()
@@ -544,6 +618,33 @@ def _gpu_centred_float32(
     return centred
 
 
+def _gpu_unit_rows_float32(
+    X: npt.NDArray, positions: npt.NDArray[np.int64]
+) -> npt.NDArray[np.float32]:
+    """L2-normalises the rows of ``X[positions]`` in float64, returns float32.
+
+    The cosine counterpart of :func:`_gpu_centred_float32`, through the same reusable
+    float64 block buffer. There is no mean-centring: the cosine dissimilarity
+    measures angles about the origin, so a shift would change the answer, and
+    unit rows already have the small extent that centring is there to provide.
+    The caller has rejected zero rows.
+    """
+    n_points, n_features = X.shape[0], X.shape[1]
+    unit = np.empty((n_points, n_features), dtype=np.float32)
+    if n_points == 0:
+        return unit
+    rows = max(1, min(n_points, GPU_CENTRING_BLOCK_BYTES // (max(1, n_features) * 8)))
+    buffer = np.empty((min(rows, n_points), n_features), dtype=np.float64)
+    with np.errstate(invalid="ignore", over="ignore"):
+        for start in range(0, n_points, rows):
+            stop = min(start + rows, n_points)
+            view = buffer[: stop - start]
+            np.copyto(view, X[positions[start:stop]], casting="unsafe")
+            view /= np.linalg.norm(view, axis=1, keepdims=True)
+            np.copyto(unit[start:stop], view, casting="unsafe")
+    return unit
+
+
 @contextlib.contextmanager
 def _gpu_exact_float32(torch_module: Any, device: Any) -> Iterator[None]:
     """Scopes the CUDA device and the exact-float32 matmul mode to one build.
@@ -652,10 +753,16 @@ def _find_landmarks_gpu(
 
     ``torch`` is imported lazily and is not a hard dependency of pyBallMapper. \
     Without it, or without a working CUDA device, this function warns and falls \
-    back to :func:`_find_landmarks_balltree`. Only the Euclidean metric is \
-    supported and orbits are not handled; for any other ``metric`` or when \
+    back to :func:`_find_landmarks_balltree`. The Euclidean and cosine metrics \
+    are supported and orbits are not handled; for any other ``metric`` or when \
     ``orbits`` are given it warns and falls back to \
     :func:`_find_landmarks_greedy`.
+
+    ``metric='cosine'`` is reduced to the Euclidean case exactly as in \
+    :func:`_find_landmarks_balltree`: the rows are L2-normalised on the host, \
+    in float64 before the float32 cast, and the device tests ``||x - y|| <= sqrt(2 * eps)``. The rows \
+    are not mean-centred in this case, since a shift changes angles. A warning \
+    reports this each time it is used. Zero vectors raise ``ValueError``.
 
     Parameters
     ----------
@@ -669,8 +776,7 @@ def _find_landmarks_gpu(
         Not supported by this method; if given, falls back to the greedy method.
 
     metric : str, default='euclidean'
-        Only 'euclidean' is supported; other values fall back to the greedy \
-        method.
+        'euclidean' or 'cosine'; other values fall back to the greedy method.
 
     order: array-like of shape (n_samples, ), default=None
         The order in which to consider the data points, exactly as in the \
@@ -711,10 +817,10 @@ def _find_landmarks_gpu(
     if metric is None:
         metric = "euclidean"
 
-    if metric != "euclidean" or orbits is not None:
+    if metric not in ("euclidean", "cosine") or orbits is not None:
         warnings.warn(
             "Warning........... the 'gpu' method only supports the euclidean "
-            "metric without orbits, falling back to the greedy method"
+            "and cosine metrics without orbits, falling back to the greedy method"
         )
         return _find_landmarks_greedy(X, eps, orbits, metric, order, verbose)
 
@@ -724,6 +830,10 @@ def _find_landmarks_gpu(
         raise ValueError(f"chunk must be a positive integer, got {chunk!r}")
     if not eps >= 0.0:
         raise ValueError(f"eps must be non-negative, got {eps!r}")
+    radius = eps
+    if metric == "cosine":
+        radius = _cosine_radius(eps)
+        _check_no_zero_rows(X)
 
     try:
         import torch
@@ -751,12 +861,23 @@ def _find_landmarks_gpu(
     # to the id of the data point sitting there
     positions = np.fromiter(order, dtype=np.int64, count=n_points)
 
-    centred = _gpu_centred_float32(X, positions)
+    if metric == "cosine":
+        points = _gpu_unit_rows_float32(X, positions)
+        warnings.warn(
+            "metric='cosine', method='gpu': rows were L2-normalised (no "
+            "mean-centring) and the test 1 - cos(x, y) <= eps was evaluated as "
+            f"||x/|x| - y/|y||| <= sqrt(2*eps) = {radius:.6g} in float32. "
+            "Points within ~1e-7 of the eps boundary may be classified "
+            "differently from method='greedy'; method='balltree' resolves them "
+            "in float64."
+        )
+    else:
+        points = _gpu_centred_float32(X, positions)
 
     with _gpu_exact_float32(torch, torch_device):
         landmarks, incidence_landmarks, incidence_points, fell_back = (
             _find_landmarks_gpu_device(
-                torch, torch_device, centred, eps, chunk, lblk, verbose
+                torch, torch_device, points, radius, chunk, lblk, verbose
             )
         )
         if fell_back:
@@ -786,8 +907,10 @@ def _find_landmarks_gpu_device(
 
     Split out from :func:`_find_landmarks_gpu` so that everything touching the \
     device sits inside the one scope that owns the device and the exact-float32 \
-    setting. ``centred`` arrives already mean-centred and in float32, from \
-    :func:`_gpu_centred_float32`. Returns the landmarks as *streaming positions*, the raw incidence \
+    setting. ``centred`` arrives already prepared on the host and in float32 \
+    -- mean-centred by :func:`_gpu_centred_float32`, or L2-normalised by \
+    :func:`_gpu_unit_rows_float32` for the cosine metric -- and ``eps`` is the \
+    Euclidean radius on those rows. Returns the landmarks as *streaming positions*, the raw incidence \
     pairs, and a flag saying the caller should fall back to the balltree method \
     because float32 cannot resolve ``eps`` on this data.
     """
@@ -1129,7 +1252,8 @@ def _find_landmarks_adaptive(
 
     metric : str, or callable, default='euclidean'
         The metric to use when calculating distance between instances in a
-        feature array.
+        feature array: 'euclidean', 'cosine' (the cosine dissimilarity
+        ``1 - cos(x, y)``), 'precomputed', or a callable.
         If metric is 'precomputed', X is assumed to be a distance matrix and
         must be square.
 
@@ -1165,6 +1289,10 @@ def _find_landmarks_adaptive(
     distance: Callable[[Any, Any], Any]
     if metric == "euclidean":
         distance = _euclid_distance
+
+    elif metric == "cosine":
+        _check_no_zero_rows(X)
+        distance = _cosine_distance
 
     elif metric == "precomputed":
         distance = lambda x, y: X[x, y]
@@ -1329,7 +1457,8 @@ def _find_landmarks(
 
     metric : str, or callable, default='euclidean'
         The metric to use when calculating distance between instances in a
-        feature array.
+        feature array: 'euclidean', 'cosine' (the cosine dissimilarity
+        ``1 - cos(x, y)``), 'precomputed', or a callable.
         If metric is 'precomputed', X is assumed to be a distance matrix and
         must be square.
 
@@ -1344,9 +1473,9 @@ def _find_landmarks(
         - "nearest": deterministic method selecting the uncovered point nearest to any existing ball
         - "adaptive": random method adjusting the radius of each ball to ensure a maximum number of points per ball
         - "greedy": random method selecting the first uncovered point in the considered order
-        - "balltree": fast BallTree-based version of "greedy" (euclidean metric \
-            only) that produces an identical BallMapper graph
-        - "gpu": CUDA version (euclidean metric only, requires pytorch). \
+        - "balltree": fast BallTree-based version of "greedy" (euclidean or \
+            cosine metric) that produces an identical BallMapper graph
+        - "gpu": CUDA version (euclidean or cosine metric, requires pytorch). \
             Expected to reproduce the greedy graph -- measured identical -- but \
             distances are resolved in float32, so a point within rounding of the \
             eps boundary can yield a different, still valid maximal eps-net
@@ -1392,7 +1521,7 @@ def _find_landmarks(
                 X, eps, orbits, metric, order, verbose
             )
         # "balltree" is a fast BallTree-based version of the greedy method
-        # (euclidean metric only) that yields an identical BallMapper graph
+        # (euclidean or cosine metric) that yields an identical BallMapper graph
         case "balltree":
             landmarks, points_covered_by_landmarks, eps_dict = _find_landmarks_balltree(
                 X, eps, orbits, metric, order, verbose
@@ -1463,7 +1592,12 @@ class BallMapper:
 
         metric : str, or callable, default='euclidean'
             The metric to use when calculating distance between instances in a
-            feature array.
+            feature array: 'euclidean', 'cosine' (the cosine dissimilarity
+            ``1 - cos(x, y)``, undefined for zero vectors), 'precomputed', or a
+            callable. The "balltree" and "gpu" methods accept 'euclidean' and
+            'cosine' and fall back to "greedy" for anything else, callables
+            included; pass the string 'cosine' rather than a cosine callable to
+            keep them fast.
             If metric is 'precomputed', X is assumed to be a distance matrix and
             must be square.
 
@@ -1478,10 +1612,10 @@ class BallMapper:
             - None or "greedy": selects the first uncovered point in the \
             considered order (default).
             - "balltree": a fast BallTree-based version of the greedy method \
-            (euclidean metric, no orbits) that produces an identical BallMapper \
-            graph, recommended for large datasets.
+            (euclidean or cosine metric, no orbits) that produces an identical \
+            BallMapper graph, recommended for large datasets.
             - "gpu": runs the landmark search on a CUDA device via pytorch \
-            (euclidean metric, no orbits). Expected to reproduce the greedy \
+            (euclidean or cosine metric, no orbits). Expected to reproduce the greedy \
             graph -- measured identical -- but distances are resolved in \
             float32, so a point within rounding of the eps boundary can yield \
             a different, still valid maximal eps-net. By far the fastest \

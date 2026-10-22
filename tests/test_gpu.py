@@ -23,6 +23,7 @@ from __future__ import annotations
 import builtins
 import sys
 import types
+import warnings
 from typing import Any
 
 import numpy as np
@@ -408,6 +409,64 @@ class TestFindLandmarksGpu:
     def test_negative_eps_is_rejected(self):
         with pytest.raises(ValueError, match="eps"):
             _find_landmarks_gpu(_blobs(n=50), eps=-0.5, metric="euclidean")
+
+
+def _directions(n: int, d: int, seed: int = 0) -> np.ndarray:
+    """Clusters of directions at random lengths, off-centre so centring would bite."""
+    rng = np.random.default_rng(seed)
+    centers = rng.normal(size=(6, d)) + 1.0
+    assign = rng.integers(0, 6, size=n)
+    X = centers[assign] + rng.normal(0, 0.15, size=(n, d))
+    return np.ascontiguousarray(X * rng.uniform(0.1, 10.0, size=(n, 1)))
+
+
+@needs_cuda
+class TestFindLandmarksGpuCosine:
+    """``metric="cosine"``: unit rows, no centring, radius ``sqrt(2 * eps)``."""
+
+    @pytest.mark.parametrize("n,d", [(400, 5), (20000, 20)])
+    @pytest.mark.parametrize("eps", [0.01, 0.05])
+    def test_matches_balltree_reference(self, eps: float, n: int, d: int):
+        """Coverage may differ only within float32 rounding of the boundary."""
+        from scipy.spatial.distance import cosine
+
+        X = _directions(n=n, d=d)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            gpu, gpu_cov, _ = _find_landmarks_gpu(X, eps=eps, metric="cosine")
+            ref, ref_cov, _ = _find_landmarks_balltree(X, eps=eps, metric="cosine")
+        assert gpu == ref
+        for node, landmark in ref.items():
+            for p in set(gpu_cov[node]) ^ set(ref_cov[node]):
+                assert abs(cosine(X[p], X[landmark]) - eps) < 1e-6
+
+    def test_rows_are_not_centred(self):
+        """A shift changes angles, so it must change the cosine graph."""
+        X = _directions(n=2000, d=5)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            original, _, _ = _find_landmarks_gpu(X, eps=0.05, metric="cosine")
+            shifted, _, _ = _find_landmarks_gpu(X + 3.0, eps=0.05, metric="cosine")
+            reference, _, _ = _find_landmarks_balltree(
+                X + 3.0, eps=0.05, metric="cosine"
+            )
+        assert shifted == reference
+        assert shifted != original
+
+    def test_warns_and_says_what_it_did(self):
+        with pytest.warns(UserWarning, match="no mean-centring.*in float32"):
+            _find_landmarks_gpu(_directions(n=100, d=5), 0.05, metric="cosine")
+
+    def test_ballmapper_graph_matches_greedy(self):
+        X = _directions(n=400, d=5)
+        greedy = BallMapper(X, eps=0.05, metric="cosine", verbose=False)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            gpu = BallMapper(X, eps=0.05, metric="cosine", method="gpu", verbose=False)
+        assert dict(greedy.Graph.nodes(data="landmark")) == dict(
+            gpu.Graph.nodes(data="landmark")
+        )
+        assert set(greedy.Graph.edges) == set(gpu.Graph.edges)
 
 
 @needs_cuda

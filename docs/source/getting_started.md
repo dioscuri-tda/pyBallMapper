@@ -30,13 +30,20 @@ the edges:
 from pyballmapper import BallMapper
 bm = BallMapper(X = my_pointcloud,
                 eps = 4.669,
-                method = "balltree")   # fast, euclidean-only
+                method = "balltree")   # fast, euclidean or cosine
 ```
 
 `method="balltree"` produces **the same graph** (identical landmarks and edges)
-as the default method — it is only faster. It supports the Euclidean metric
-without orbits; for any other metric, or when `orbits` are given, it
+as the default method — it is only faster. It supports the Euclidean and cosine
+metrics without orbits; for any other metric, or when `orbits` are given, it
 automatically falls back to the default greedy search.
+
+`metric="cosine"` uses the cosine dissimilarity `1 - cos(x, y)`. The fast
+methods reduce it to the Euclidean case exactly: on L2-normalised rows,
+`1 - cos(x, y) <= eps` holds precisely when `‖x − y‖ <= sqrt(2·eps)`. They warn
+each time they do this, and zero vectors, for which the cosine is undefined,
+raise a `ValueError`. Pass the string `"cosine"`; a cosine *callable* cannot be
+recognised as such and falls back to the greedy search.
 
 ### Running on a GPU 🚀
 
@@ -47,7 +54,7 @@ landmark search on a CUDA device via [PyTorch](https://pytorch.org):
 from pyballmapper import BallMapper
 bm = BallMapper(X = my_pointcloud,
                 eps = 4.669,
-                method = "gpu")        # CUDA, euclidean-only
+                method = "gpu")        # CUDA, euclidean or cosine
 ```
 
 This is not an approximation. The greedy rule is exactly the
